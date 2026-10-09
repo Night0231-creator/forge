@@ -117,9 +117,13 @@ def download_installer(release,progress=None,destination=None):
         if temp.exists():temp.unlink()
 
 def is_portable() -> bool:
-    """Portable onedir distribution does not use Inno Setup for updates."""
-    return (sys.platform == 'win32' and bool(getattr(sys, 'frozen', False))
-            and (Path(sys.executable).resolve().parent / '_internal').is_dir())
+    """Recognize portable ZIP separately from a formal Inno Setup installation.
+
+    Both distributions can have _internal. Installed builds have unins000.exe.
+    """
+    if sys.platform != 'win32' or not getattr(sys, 'frozen', False):
+        return False
+    return not (Path(sys.executable).resolve().parent / 'unins000.exe').is_file()
 
 
 def run_installer(path):
