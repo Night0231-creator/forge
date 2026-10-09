@@ -1,0 +1,56 @@
+name: Astronyx Mini Forge Studio 2.0.1 Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Testar motor preservado
+        run: python -m unittest discover -s tests -v
+      - name: Instalar Inno Setup 6
+        shell: powershell
+        run: choco install innosetup -y --no-progress
+      - name: Compilar Studio.exe e Setup.exe
+        shell: powershell
+        run: .\tools\build_windows.ps1
+      - name: Testar instalador em Windows
+        shell: powershell
+        run: .\tools\test_installer_windows.ps1
+      - name: Gerar hashes SHA256
+        shell: powershell
+        run: |
+          $files = @('dist/AstronyxMiniForgeStudio.exe', 'dist/installer/AstronyxMiniForgeStudio-Setup-v2.0.1.exe')
+          foreach ($file in $files) {
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+            "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
+          }
+      - name: Enviar autotestes e hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstronyxMiniForgeStudio-Validacao
+          path: |
+            dist/validation-portable.json
+            dist/validation-installer.json
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Enviar executavel portatil
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstronyxMiniForgeStudio-Windows-Portable
+          path: dist/AstronyxMiniForgeStudio.exe
+          if-no-files-found: error
+      - name: Enviar instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstronyxMiniForgeStudio-Windows-Setup
+          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.0.1.exe
+          if-no-files-found: error
