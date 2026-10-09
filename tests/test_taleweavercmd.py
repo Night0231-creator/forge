@@ -128,3 +128,44 @@ class TestOfficialCmd(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TaleWeaverDiagnosticsTests(unittest.TestCase):
+    def test_log_filters_unity_memorysetup_noise(self):
+        from core.taleweavercmd import _read_log_errors
+        with tempfile.TemporaryDirectory() as folder:
+            logfile = Path(folder) / 'taleweavercmd.log'
+            logfile.write_text(
+                '-memorysetup-job-temp-allocator-block-size=2097152\\n'
+                'Initialize engine version: 2022\\n'
+                'Error: unable to load albedo.png\\n',
+                encoding='utf-8')
+            result = _read_log_errors(logfile, ['-memorysetup-temp-allocator-size=262144'])
+            self.assertIn('unable to load albedo', result)
+            self.assertNotIn('memorysetup-', result)
+
+    def test_large_png_is_downscaled_only_in_staging(self):
+        from core.taleweavercmd import _copy_compatible_texture
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'Albedo.png'
+            dest = Path(folder) / 'staged_albedo.png'
+            Image.new('RGB', (2300, 1200), (125, 140, 210)).save(source)
+            _copy_compatible_texture(source, dest)
+            with Image.open(source) as orig, Image.open(dest) as result:
+                self.assertEqual(orig.size, (2300, 1200))
+                self.assertLessEqual(max(result.size), 2048)
+
+    def test_missing_runtime_dependencies_give_actionable_error(self):
+        import os
+        from core.taleweavercmd import _verify_tool_runtime
+        if os.name != 'nt':
+            self.skipTest('Unity runtime validation is Windows-specific')
+        with tempfile.TemporaryDirectory() as folder:
+            exe = Path(folder) / 'TaleWeaverCmd.exe'
+            exe.write_bytes(b'MZ' + b'\\0' * 20)
+            with self.assertRaisesRegex(RuntimeError, 'UnityPlayer.dll'):
+                _verify_tool_runtime(exe)
+            (Path(folder) / 'UnityPlayer.dll').write_bytes(b'test')
+            (Path(folder) / 'TaleWeaverCmd_Data').mkdir()
+            _verify_tool_runtime(exe)
