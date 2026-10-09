@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, master, v2.2-ui, 'fix/win10-win11-4551', 'fix/v2.2.3-scale-quality']
+    branches: [main, master, v2.2-ui, 'fix/win10-win11-4551', 'fix/v2.2.2-scale-quality', 'feat/v2.2.3-hud-polish']
     tags: ['v*']
 
 jobs:
