@@ -1,0 +1,28 @@
+# Windows file properties for AstronyxMiniForgeStudio.exe, consumed by PyInstaller.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(2, 2, 0, 0),
+    prodvers=(2, 2, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('040904B0', [
+        StringStruct('CompanyName', 'Astronyx'),
+        StringStruct('FileDescription', 'Astronyx Mini Forge Studio'),
+        StringStruct('FileVersion', '2.2.0.0'),
+        StringStruct('InternalName', 'AstronyxMiniForgeStudio'),
+        StringStruct('OriginalFilename', 'AstronyxMiniForgeStudio.exe'),
+        StringStruct('ProductName', 'Astronyx Mini Forge Studio'),
+        StringStruct('ProductVersion', '2.2.0.0'),
+        StringStruct('LegalCopyright', 'Copyright (c) 2026 Astronyx')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
