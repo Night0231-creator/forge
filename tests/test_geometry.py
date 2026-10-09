@@ -3,7 +3,7 @@ import math
 import tempfile
 import unittest
 from pathlib import Path
-from core.geometry import inspect_obj, suggest_factor
+from core.geometry import inspect_obj, suggest_factor, suggest_safe_factor
 from core.taleweavercmd import prepare_cmd_input
 
 
@@ -56,17 +56,28 @@ class TestGeometry(unittest.TestCase):
                 (src/filename).write_bytes(b'TEST')
             stage = prepare_cmd_input(dest,'Hero',height=1.75,target_height=14)
             actual = inspect_obj(stage/'model.obj')
-            self.assertAlmostEqual(actual.height,14)
+            self.assertLess(actual.height,14)
+            self.assertLessEqual(max(actual.width,actual.depth),1.300001)
             params = json.loads((stage/'params.json').read_text())
-            self.assertAlmostEqual(params['PointsOfInterest']['Head']['y'],12.46)
+            self.assertAlmostEqual(params['PointsOfInterest']['Head']['y'],round(actual.height*.89,4))
             params['PointsOfInterest']['Spell']['x']=1.42
             (stage/'params.json').write_text(json.dumps(params), encoding='utf-8')
             stage = prepare_cmd_input(dest,'Hero',height=1.75,preserve_params=True,target_height=7)
             after = json.loads((stage/'params.json').read_text())
-            self.assertAlmostEqual(after['PointsOfInterest']['Spell']['x'],.71)
-            self.assertAlmostEqual(inspect_obj(stage/'model.obj').height,7)
+            self.assertAlmostEqual(after['PointsOfInterest']['Spell']['x'],1.42)
+            self.assertAlmostEqual(inspect_obj(stage/'model.obj').height,actual.height)
             self.assertEqual(inspect_obj(src/'Hero.obj').height,1.75)
 
 
 if __name__ == '__main__':
     unittest.main()
+
+class SafeFootprintTests(unittest.TestCase):
+    def test_wide_mesh_limited(self):
+        from core.geometry import ObjStats
+        stats=ObjStats(4,2,(-2,0,-.5),(2,2,.5))
+        self.assertAlmostEqual(suggest_safe_factor(stats,1.75),.325)
+    def test_normal_humanoid_kept(self):
+        from core.geometry import ObjStats
+        stats=ObjStats(4,2,(-.2,0,-.2),(.2,1.75,.2))
+        self.assertAlmostEqual(suggest_safe_factor(stats,1.75),1)

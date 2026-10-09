@@ -18,6 +18,12 @@ class ObjStats:
     max_xyz: tuple[float, float, float]
 
     @property
+    def width(self) -> float:
+        return self.max_xyz[0] - self.min_xyz[0]
+    @property
+    def depth(self) -> float:
+        return self.max_xyz[2] - self.min_xyz[2]
+    @property
     def height(self) -> float:
         return self.max_xyz[1] - self.min_xyz[1]  # TaleWeaverCmd OBJ is Y-up
 
@@ -85,3 +91,18 @@ def suggest_factor(obj_height: float, reference_height: float = 1.75) -> float:
     if not 0.1 <= value <= 100:
         raise ValueError('Escala automatica fora do intervalo 0,1x a 100x. Ajuste o modelo no Blender.')
     return value
+
+def suggest_safe_factor(stats: ObjStats, reference_height: float = 1.75,
+                        footprint_limit: float = 1.30) -> float:
+    """Limit OBJ height and horizontal bounds, not gameplay collider."""
+    factor = suggest_factor(stats.height, reference_height)
+    if not math.isfinite(footprint_limit) or footprint_limit <= 0.2:
+        raise ValueError('Largura de base invalida.')
+    footprint = max(stats.width, stats.depth)
+    if not math.isfinite(footprint):
+        raise ValueError('Dimensoes invalidas.')
+    if footprint > 1e-6:
+        factor = min(factor, footprint_limit / footprint)
+    if not 0.1 <= factor <= 100:
+        raise ValueError('Escala insegura. Ajuste o modelo no Blender.')
+    return factor

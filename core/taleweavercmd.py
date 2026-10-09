@@ -14,7 +14,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
-from .geometry import inspect_obj, suggest_factor
+from .geometry import inspect_obj, suggest_factor, suggest_safe_factor
 
 REQUIRED_FILES = (
     'model.obj', 'albedo.png', 'metallic_ao_emis_smoothness.png',
@@ -117,9 +117,10 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
                       target_height: float | None = None) -> Path:
     """Create exact official files, without affecting original 3D materials."""
     folder = Path(folder).resolve()
-    scale_factor = (suggest_factor(inspect_obj(folder / 'TaleWeaverCmd_Source' / f'{name}.obj').height,
-                                   float(target_height)) if target_height is not None
+    source_stats = inspect_obj(folder / 'TaleWeaverCmd_Source' / f'{name}.obj')
+    scale_factor = (suggest_safe_factor(source_stats, float(target_height)) if target_height is not None
                     else float(scale_factor))
+    actual_height = source_stats.height * scale_factor
     if not math.isfinite(scale_factor) or not 0.1 <= scale_factor <= 100:
         raise ValueError('Multiplicador de escala deve ficar entre 0,1 e 100.')
     source = folder / 'TaleWeaverCmd_Source'
@@ -141,14 +142,18 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
         except (ValueError, KeyError, TypeError, OSError):
             previous_factor = 1.0
     if not preserve_params or not paramfile.is_file():
-        params = build_params(name, height * scale_factor)
+        params = build_params(name, max(0.1, actual_height))
     else:
         params = json.loads(paramfile.read_text(encoding='utf-8'))
         if not math.isclose(scale_factor, previous_factor):
             params = adjusted_points(params, scale_factor / previous_factor)
     paramfile.write_text(json.dumps(params, ensure_ascii=False, indent=2), encoding='utf-8')
     ensure_cmd_files(stage)
-    scale_metadata.write_text(json.dumps({'scale_factor': scale_factor, 'original_height': height}, indent=2), encoding='utf-8')
+    scale_metadata.write_text(json.dumps({'scale_factor': scale_factor, 'original_height': height,
+                                           'source_height': source_stats.height,
+                                           'effective_height': actual_height,
+                                           'width': source_stats.width * scale_factor,
+                                           'depth': source_stats.depth * scale_factor}, indent=2), encoding='utf-8')
     return stage
 
 
@@ -198,8 +203,10 @@ def run_taleweavercmd(executable: Path, folder: Path, name: str,
     try:
         measured = json.loads((folder / 'TaleWeaverCmd_escala.json').read_text(encoding='utf-8'))
         if on_line:
-            on_line(f"Escala efetiva: {measured['scale_factor']:.3f}x | altura esperada: "
-                    f"{float(measured['scale_factor'])*float(measured['original_height']):.2f} un.")
+            on_line(f"Escala efetiva: {measured['scale_factor']:.3f}x | altura real: "
+                    f"{float(measured.get('effective_height', measured['original_height'])):.2f} un.")
+            if target_height is not None and float(measured.get('effective_height', 0)) < target_height*.9:
+                on_line('Aviso: a base limitou a escala; confira armas e asas muito largas.')
     except (OSError, ValueError, KeyError, TypeError):
         pass
     output = stage / 'converted.tsMod'
