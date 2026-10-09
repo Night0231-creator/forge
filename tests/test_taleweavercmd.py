@@ -136,9 +136,9 @@ class TaleWeaverDiagnosticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             logfile = Path(folder) / 'taleweavercmd.log'
             logfile.write_text(
-                '-memorysetup-job-temp-allocator-block-size=2097152\\n'
-                'Initialize engine version: 2022\\n'
-                'Error: unable to load albedo.png\\n',
+                '-memorysetup-job-temp-allocator-block-size=2097152\n'
+                'Initialize engine version: 2022\n'
+                'Error: unable to load albedo.png\n',
                 encoding='utf-8')
             result = _read_log_errors(logfile, ['-memorysetup-temp-allocator-size=262144'])
             self.assertIn('unable to load albedo', result)
