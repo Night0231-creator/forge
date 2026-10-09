@@ -2,7 +2,7 @@
 # and the embedded Tcl/assets from the installed application.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$setup = Join-Path $root 'dist\installer\AstronyxMiniForgeStudio-Setup-v2.0.2.exe'
+$setup = Join-Path $root 'dist\installer\AstronyxMiniForgeStudio-Setup-v2.1.0.exe'
 if (-not (Test-Path $setup)) { throw 'Instalador nao foi gerado.' }
 $destination = Join-Path $env:TEMP 'Astronyx-Installer-Test-2_0_1'
 $log = Join-Path $root 'dist\installer-smoke.log'

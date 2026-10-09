@@ -1,5 +1,5 @@
 #define StudioName "Astronyx Mini Forge Studio"
-#define StudioVersion "2.0.2"
+#define StudioVersion "2.1.0"
 [Setup]
 AppId={{C31F9C66-FF88-4C88-87F4-41618861D139}
 AppName={#StudioName}
@@ -8,7 +8,7 @@ AppPublisher=Astronyx
 DefaultDirName={localappdata}\Programs\AstronyxMiniForgeStudio
 DefaultGroupName=Astronyx Mini Forge Studio
 OutputDir=..\dist\installer
-OutputBaseFilename=AstronyxMiniForgeStudio-Setup-v2.0.2
+OutputBaseFilename=AstronyxMiniForgeStudio-Setup-v2.1.0
 SetupIconFile=..\assets\astronyx.ico
 Compression=lzma2
 SolidCompression=yes
