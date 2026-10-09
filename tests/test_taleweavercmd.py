@@ -76,7 +76,7 @@ class TestOfficialCmd(unittest.TestCase):
             exe = Path(d)/'TaleWeaverCmd.exe'
             exe.write_text('stub')
             def process_factory(args, **_):
-                self.assertEqual(args[0], str(exe))
+                self.assertEqual(Path(args[0]).resolve(), exe.resolve())
                 self.assertEqual(args[1], '-srcDir')
                 self.assertEqual(args[3], '-logFile')
                 stage = Path(args[2])
@@ -85,7 +85,7 @@ class TestOfficialCmd(unittest.TestCase):
                 return FakeProcess()
             with patch('core.taleweavercmd.subprocess.Popen', side_effect=process_factory):
                 result = run_taleweavercmd(exe, folder, 'Guerreiro')
-            self.assertEqual(result, folder/'Guerreiro.tsMod')
+            self.assertEqual(result.resolve(), (folder/'Guerreiro.tsMod').resolve())
             self.assertTrue(result.is_file())
 
     def test_does_not_accept_stale_or_missing_output(self):

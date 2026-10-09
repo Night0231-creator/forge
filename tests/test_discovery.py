@@ -9,7 +9,7 @@ class DiscoveryTests(unittest.TestCase):
     def test_parses_windows_and_unix_library_paths(self):
         text = '"path" "D:\\\\SteamLibrary"\n"path" "/data/steamgames"'
         self.assertEqual([str(p) for p in parse_steam_libraryfolders(text)],
-                         ['D:\\SteamLibrary', '/data/steamgames'])
+                         ['D:\\SteamLibrary', str(Path('/data/steamgames'))])
 
     def test_detects_cmd_in_additional_library(self):
         with tempfile.TemporaryDirectory() as temp:

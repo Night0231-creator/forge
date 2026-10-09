@@ -55,7 +55,10 @@ class TestPreferences(unittest.TestCase):
                  patch('core.preferences.sys.platform', 'linux'), \
                  patch('core.preferences.subprocess.Popen') as proc:
                 open_output_folder(folder)
-                proc.assert_called_once_with(['xdg-open', str(folder)])
+                proc.assert_called_once()
+                args = proc.call_args.args[0]
+                self.assertEqual(args[0], 'xdg-open')
+                self.assertEqual(Path(args[1]), folder)
 
 
 if __name__ == '__main__':
