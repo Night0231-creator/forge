@@ -1,5 +1,7 @@
 name: Astronyx Mini Forge Studio 2.2.5 Windows (Win10/Win11)
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish_release:
