@@ -409,6 +409,12 @@ class Studio(UpdateInterface, legacy.Forge):
         for child in self.library_frame.winfo_children():
             child.destroy()
         self.library_image_refs=[]
+        # Reset column weights when resizing 4 -> 3 -> 2, otherwise an empty
+        # previously-used column keeps occupying width.
+        for column in range(4):
+            self.library_frame.grid_columnconfigure(column,weight=0,uniform='')
+        for column in range(self.gallery_columns):
+            self.library_frame.grid_columnconfigure(column,weight=1,uniform='gallery')
         entries=self.library_entries
         filtered=hud22.filter_miniatures(entries,self.library_search.get(),
                                           self.library_filter.get())
