@@ -6,6 +6,9 @@ V1.7 Forge methods and core modules.
 from __future__ import annotations
 
 import datetime as dt
+import queue
+import threading
+import sys
 import os
 import tkinter as tk
 import webbrowser
@@ -15,6 +18,8 @@ from tkinter import ttk, messagebox
 import app as legacy
 from core.library import scan_library, Miniature
 from core.preferences import open_output_folder
+from core.version import APP_VERSION
+from core.updater import find_update, download_installer, run_installer, UpdateError
 
 
 SIDEBAR = '#10111F'
@@ -25,7 +30,115 @@ ACCENT = legacy.ACCENT
 GREEN = legacy.GREEN
 
 
-class Studio(legacy.Forge):
+
+class UpdateInterface:
+    """Asynchronous checks: no network requests on the Tk thread."""
+
+    def _begin_updates(self):
+        self.update_events = queue.Queue()
+        self._checking_updates = False
+        self._downloading_update = False
+        self._update_window = None
+        self.after(120, self._poll_updates)
+        self.after(1800, lambda: self._check_updates(False))
+
+    def _check_updates(self, manual=True):
+        if self._checking_updates or self._downloading_update:
+            return
+        self._checking_updates = True
+        def work():
+            try:
+                self.update_events.put(('check', find_update(), manual))
+            except Exception as ex:
+                self.update_events.put(('error', str(ex), manual))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poll_updates(self):
+        try:
+            while True:
+                event = self.update_events.get_nowait()
+                if event[0] == 'check':
+                    self._checking_updates = False
+                    if event[1]:
+                        self._show_update(event[1])
+                    elif event[2]:
+                        messagebox.showinfo('Atualizações', 'Você já está na versão mais recente.')
+                elif event[0] == 'error':
+                    self._checking_updates = False
+                    self._downloading_update = False
+                    if self._update_window and self._update_window.winfo_exists():
+                        self._update_status.set('Não foi possível atualizar: ' + event[1])
+                        self._update_download_btn.configure(state='normal')
+                    elif event[2]:
+                        messagebox.showwarning('Atualizações', event[1])
+                elif event[0] == 'progress':
+                    if self._update_window and self._update_window.winfo_exists():
+                        self._update_status.set('Baixando: %d%%' % (event[1] * 100 / max(1,event[2])))
+                elif event[0] == 'ready':
+                    self._downloading_update = False
+                    if self.busy:
+                        self._update_status.set('Termine a conversão antes de atualizar.')
+                        self._update_download_btn.configure(state='normal')
+                    else:
+                        try:
+                            run_installer(event[1])
+                            self._close()
+                        except Exception as ex:
+                            self._update_status.set('Instalador não iniciado: ' + str(ex))
+                            self._update_download_btn.configure(state='normal')
+        except queue.Empty:
+            pass
+        if self.winfo_exists():
+            self.after(120, self._poll_updates)
+
+    def _show_update(self, release):
+        if self._update_window and self._update_window.winfo_exists():
+            self._update_window.destroy()
+        win=tk.Toplevel(self)
+        self._update_window=win
+        win.title('Atualização disponível • Astronyx')
+        win.configure(bg=PANEL)
+        win.geometry('540x345')
+        win.transient(self)
+        tk.Label(win,text='✦ Nova versão disponível',bg=PANEL,fg='#B998FF',
+                 font=('Segoe UI',17,'bold')).pack(anchor='w',padx=22,pady=(18,5))
+        tk.Label(win,text=f'Instalada: {APP_VERSION}   →   Nova: {release.version}',bg=PANEL,fg=FG).pack(anchor='w',padx=22)
+        notes=tk.Text(win,bg='#10111F',fg=FG,height=8,wrap='word',relief='flat',padx=10,pady=7)
+        notes.pack(fill='both',expand=True,padx=22,pady=12)
+        notes.insert('1.0',release.notes or 'Correções e melhorias.')
+        notes.config(state='disabled')
+        self._update_status=tk.StringVar(value='Download verificado por SHA-256 antes de executar.')
+        tk.Label(win,textvariable=self._update_status,bg=PANEL,fg=MUTED,wraplength=495).pack(anchor='w',padx=22)
+        controls=tk.Frame(win,bg=PANEL)
+        controls.pack(fill='x',padx=22,pady=12)
+        self._button(controls,'Mais tarde',win.destroy,padx=10,pady=7).pack(side='left')
+        self._button(controls,'Ver Release',lambda:webbrowser.open(release.page),padx=10,pady=7).pack(side='left',padx=8)
+        name='Baixar e instalar' if sys.platform=='win32' and getattr(sys,'frozen',False) else 'Abrir página de download'
+        self._update_download_btn=self._button(controls,name,lambda:self._download_update(release),accent=True,padx=10,pady=7)
+        self._update_download_btn.pack(side='right')
+
+    def _download_update(self, release):
+        if self.busy:
+            messagebox.showwarning('Conversão em andamento','Finalize a conversão antes da atualização.')
+            return
+        if sys.platform!='win32' or not getattr(sys,'frozen',False):
+            webbrowser.open(release.page)
+            return
+        if self._downloading_update:
+            return
+        self._downloading_update=True
+        self._update_download_btn.configure(state='disabled')
+        self._update_status.set('Baixando com verificação de integridade...')
+        def work():
+            try:
+                file=download_installer(release,progress=lambda n,t:self.update_events.put(('progress',n,t)))
+                self.update_events.put(('ready',file))
+            except Exception as ex:
+                self.update_events.put(('error',str(ex),True))
+        threading.Thread(target=work,daemon=True).start()
+
+
+class Studio(UpdateInterface, legacy.Forge):
     NAV = [
         ('home', '✦', 'Início rápido', 'tab_quick'),
         ('library', '▦', 'Minhas miniaturas', 'tab_library'),
@@ -41,6 +154,7 @@ class Studio(legacy.Forge):
         self.library_cards: list[tk.Widget] = []
         self.library_image_refs = []
         super().__init__()
+        self._begin_updates()
         self.title('Astronyx Mini Forge Studio 2.0.2 • Meshy → TaleSpire')
         if os.name == 'nt':
             try:
@@ -100,6 +214,8 @@ class Studio(legacy.Forge):
         actions.pack(side='right', padx=21, pady=22)
         self._button(actions, '↻  Detectar programas', self._detect_required,
                      padx=12, pady=9).pack(side='right')
+        self._button(actions, '⬆  Atualizações', lambda:self._check_updates(True),
+                     padx=11, pady=9).pack(side='right',padx=(0,9))
 
         status = tk.Frame(main, bg=legacy.BG)
         status.pack(fill='x', padx=22, pady=(13, 0))

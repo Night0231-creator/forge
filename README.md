@@ -1,4 +1,4 @@
-# Astronyx Mini Forge Studio V2.0.1
+# Astronyx Mini Forge Studio V2.1.0
 
 **Novo estúdio visual e distribuição Windows, preservando o motor de conversão funcional da V1.7.** Projeto gratuito e independente do TaleSpire / Meshy.
 
@@ -14,7 +14,7 @@
 
 ## Status da versão
 
-**Verificação adicional na V2.0.1:** `--self-test` checa Tcl e recursos empacotados, e o GitHub Actions executa o instalador silenciosamente em Windows para testar o EXE instalado. **Testado neste ambiente:** suíte de testes Python e interface em ambiente gráfico Linux virtual (Tkinter). **Não testado aqui:** compilação nativa do executável ou do instalador no Windows. A exportação .tsMod usa o mesmo motor da V1.7 que você confirmou funcionar no seu computador, sem mudanças nas funções de conversão.
+**Verificação adicional na V2.1.0:** `--self-test` checa Tcl e recursos empacotados, e o GitHub Actions executa o instalador silenciosamente em Windows para testar o EXE instalado. **Testado neste ambiente:** suíte de testes Python e interface em ambiente gráfico Linux virtual (Tkinter). **Não testado aqui:** compilação nativa do executável ou do instalador no Windows. A exportação .tsMod usa o mesmo motor da V1.7 que você confirmou funcionar no seu computador, sem mudanças nas funções de conversão.
 
 ## Instalar na máquina de desenvolvimento
 
@@ -31,7 +31,7 @@ No computador Windows que vai compilar, instale Python 3.10+ (recomendado 3.12).
 powershell -ExecutionPolicy Bypass -File .\tools\build_windows.ps1
 ```
 
-Depois, use `dist\AstronyxMiniForgeStudio.exe` (versão portável) ou `dist\installer\AstronyxMiniForgeStudio-Setup-v2.0.1.exe` (instalador com atalhos).
+Depois, use `dist\AstronyxMiniForgeStudio.exe` (versão portável) ou `dist\installer\AstronyxMiniForgeStudio-Setup-v2.1.0.exe` (instalador com atalhos).
 
 **Alternativa sem compilar localmente:** envie o código ao seu GitHub, abra Actions → "Astronyx Mini Forge Studio 2.0 Windows" → Run workflow → baixe os dois arquivos publicados na execução. Não há necessidade de compartilhar senhas ou tokens.
 
@@ -51,7 +51,7 @@ Os amigos **não precisam instalar Python** para usar o `.exe` gerado. Eles prec
 python -m unittest discover -s tests -v
 ```
 
-## Validação Windows V2.0.1
+## Validação Windows V2.1.0
 
 A ação do GitHub agora impede publicar artefatos quando falhar o autoteste do executável portátil ou do instalador. Faz checagem de recursos, runtime Tcl e execução do instalador em ambiente Windows. Não simula nem atesta conversão 3D real.
 
@@ -66,3 +66,10 @@ O valor inicial 14 foi reduzido para 1,75 (aumento 8x fazia o jogo tratar o mode
 Para recuperar polígonos e detalhes de textura, é preciso converter **novamente o arquivo original do Meshy**. Repetir apenas .tsMod reaproveita a malha antiga. O programa não exporta esqueleto/animação de caminhada; o movimento da miniatura depende do TaleSpire.
 
 Esta atualização é **experimental**, não validada visualmente com Blender/TaleWeaverCmd reais. Consulte NOTAS_CORRECAO_QUALIDADE.md.
+
+
+## Atualizações automáticas V2.1.0
+
+O Studio verifica Releases públicas em segundo plano ao abrir e pelo botão Atualizações. Havendo versão nova, mostra notas e oferece Mais tarde, Ver Release ou Baixar e instalar. Instalação é interativa (não silenciosa), com verificação SHA-256 antes de executar. Miniaturas e configurações não são alteradas. A primeira instalação de V2.1.0 deve ser manual para habilitar esse mecanismo nas próximas versões.
+
+Para publicar Release no GitHub Actions use Run workflow e marque publish_release. Alternativamente envie uma tag vX.Y.Z que coincida com core/version.py. O repo precisa ser público para a checagem sem login dos amigos.

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Astronyx Mini Forge Studio V2.0.1
+title Astronyx Mini Forge Studio V2.1.0
 if exist "AstronyxMiniForgeStudio.exe" (
   start "" "%~dp0AstronyxMiniForgeStudio.exe"
   exit /b 0
