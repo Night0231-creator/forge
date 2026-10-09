@@ -36,7 +36,7 @@ def _copy_compatible_texture(source: Path, destination: Path) -> None:
     """
     with source.open('rb') as data:
         signature = data.read(8)
-    if signature != b'\\x89PNG\\r\\n\\x1a\\n':
+    if signature != b'\x89PNG\r\n\x1a\n':
         shutil.copy2(source, destination)
         return
     try:
@@ -100,8 +100,8 @@ def _read_log_errors(path: Path, tail: list[str]) -> str:
     important = [line for line in meaningful
                  if re.search(r'error|exception|failed|fatal|invalid|could not|not found|missing|crash|abort',line,re.I)]
     if important:
-        return '\\n'.join(important[-8:])
-    return '\\n'.join(meaningful[-8:]) if meaningful else (
+        return '\n'.join(important[-8:])
+    return '\n'.join(meaningful[-8:]) if meaningful else (
         'O processo encerrou sem um erro explicito no log. Confira se o TaleWeaverCmd '
         'possui UnityPlayer.dll e TaleWeaverCmd_Data e verifique os arquivos pela Steam.'
     )
