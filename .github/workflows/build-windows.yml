@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, master, v2.2-ui]
+    branches: [main, master, v2.2-ui, 'fix/windows10-win11-4551']
     tags: ['v*']
 
 jobs:
