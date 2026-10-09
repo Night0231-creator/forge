@@ -141,6 +141,20 @@ def metrics(mesh_obj):
     zs = [v.co.z for v in vertices]
     return (min(xs), max(xs), min(ys), max(ys), min(zs), max(zs))
 
+def enforce_footprint(obj, limit=1.30):
+    """Limit visual footprint of export, not TaleSpire's gameplay collider."""
+    lowx, highx, lowy, highy, _, _ = metrics(obj)
+    footprint = max(highx-lowx, highy-lowy)
+    if footprint <= limit:
+        return 1.0
+    factor = limit / footprint
+    for vert in obj.data.vertices:
+        vert.co *= factor
+    obj.data.update()
+    print(f'AMF_WARNING|Base muito larga, reduzindo {factor:.3f}x. '
+          'Asas e armas podem diminuir o tamanho aparente.', flush=True)
+    return factor
+
 
 def normalize_model(obj, cfg):
     angle = math.radians(cfg['rotation'])
@@ -157,6 +171,7 @@ def normalize_model(obj, cfg):
         vert.co.y = (vert.co.y - cy) * scale
         vert.co.z = (vert.co.z - lowz) * scale
     obj.data.update()
+    return {'height_scale': scale, 'footprint_scale': enforce_footprint(obj)}
 
 
 def optimize(obj, desired_faces):
@@ -185,6 +200,12 @@ def optimize(obj, desired_faces):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bmesh.ops.triangulate(bm, faces=list(bm.faces))
+    bmesh.ops.recalc_face_normals(bm, faces=list(bm.faces))
+    for face in bm.faces:
+        face.smooth = True
+    for edge in bm.edges:
+        if len(edge.link_faces) == 2 and edge.calc_face_angle(0.0) > math.radians(55):
+            edge.smooth = False
     bm.to_mesh(obj.data)
     bm.free()
     obj.data.update()
@@ -484,13 +505,16 @@ def main():
     status(15, 'Unindo malhas e preservando materiais')
     obj = geometry_as_single_mesh()
     status(25, 'Centralizando, girando e ajustando escala')
-    normalize_model(obj, cfg)
+    norm = normalize_model(obj, cfg)
     status(35, 'Reduzindo triangulos e verificando limites')
     stats = optimize(obj, cfg['tris'])
-    stats['height'] = cfg['height']
     bounds = metrics(obj)
+    stats['height'] = bounds[5] - bounds[4]
+    stats['requested_height'] = cfg['height']
     stats['width'] = bounds[1] - bounds[0]
     stats['depth'] = bounds[3] - bounds[2]
+    stats['height_scale_applied'] = norm['height_scale']
+    stats['footprint_scale_applied'] = norm['footprint_scale']
     if max(stats['width'], stats['depth']) > cfg['height'] * 1.8:
         print('AMF_WARNING|Modelo muito largo ou profundo; a base pode ser maior por causa de asas e acessorios.', flush=True)
     status(45, f"Malha pronta: {stats['vertices']} vertices / {stats['triangles']} triangulos")

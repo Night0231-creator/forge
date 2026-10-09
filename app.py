@@ -77,7 +77,7 @@ class Forge(tk.Tk):
         self.scale_factor = tk.StringVar(value=str(stored.get('scale_factor', '1')))
         self.auto_scale = tk.BooleanVar(value=stored.get('auto_scale', True))
         self.target_height = tk.StringVar(value=stored.get('target_height','1.75'))
-        self.quality = tk.StringVar(value='Detalhado')
+        self.quality = tk.StringVar(value='Alta')
         self.preview_info = tk.StringVar(value='Converta um modelo ou abra o OBJ preparado.')
         self._thumbnail_img = None
         self.height = tk.StringVar(value='1.75')
@@ -140,7 +140,7 @@ class Forge(tk.Tk):
                            fill=FG, font=('Segoe UI', 24, 'bold'))
         header.create_text(34, 78, anchor='w', text='MESHY AI  →  BLENDER  →  TALEWEAVERCMD  →  TALESPIRE',
                            fill='#BAA8E8', font=('Segoe UI', 10, 'bold'))
-        header.create_text(935, 92, anchor='e', text='VERSÃO 1.7  •  WINDOWS',
+        header.create_text(935, 92, anchor='e', text='VERSÃO 2.2.2  •  WINDOWS',
                            fill='#C3B5F3', font=('Segoe UI', 9, 'bold'))
         content = tk.Frame(self, bg=BG)
         content.pack(fill='both', expand=True, padx=22, pady=(14, 12))
@@ -334,14 +334,14 @@ class Forge(tk.Tk):
         options = tk.Frame(body, bg=PANEL)
         options.pack(fill='x', pady=(13, 0))
         self._label(options, 'RESOLUÇÃO DAS TEXTURAS').pack(side='left', padx=(0, 12))
-        ttk.Combobox(options, textvariable=self.resolution, values=('512', '1024', '2048'),
+        ttk.Combobox(options, textvariable=self.resolution, values=('512', '1024', '2048', '4096'),
                      state='readonly', width=7).pack(side='left', padx=(0, 17))
         ttk.Checkbutton(options, text='Exportar também para CustomMiniPlugin (com mod)',
                         variable=self.plugin).pack(side='left')
         quality_line = tk.Frame(body, bg=PANEL)
         quality_line.pack(fill='x', pady=(13, 0))
         self._label(quality_line,'PERFIL DE QUALIDADE').pack(side='left',padx=(0,12))
-        combo=ttk.Combobox(quality_line, textvariable=self.quality, values=('Leve','Equilibrado','Detalhado'),state='readonly',width=15)
+        combo=ttk.Combobox(quality_line, textvariable=self.quality, values=('Leve','Equilibrado','Alta','Ultra'),state='readonly',width=15)
         combo.pack(side='left')
         combo.bind('<<ComboboxSelected>>', self._apply_quality)
         self._label(quality_line,'(preenche triângulos e resolução; você ainda pode personalizar)',fg=MUTED).pack(side='left',padx=12)
@@ -381,7 +381,8 @@ class Forge(tk.Tk):
     def _apply_quality(self, _event=None):
         faces, resolution = {'Leve': ('18000','1024'),
                              'Equilibrado': ('45000','2048'),
-                             'Detalhado': ('100000','2048')}[self.quality.get()]
+                             'Alta': ('100000','2048'),
+                             'Ultra': ('120000','4096')}[self.quality.get()]
         self.tris.set(faces)
         self.resolution.set(resolution)
 

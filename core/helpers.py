@@ -41,8 +41,8 @@ def validate_config(data: dict) -> dict:
         raise ValueError("A rotação deve ficar entre -360° e +360°.")
     if not (500 <= tris <= 120000):
         raise ValueError("O limite deve ficar entre 500 e 120.000 triângulos.")
-    if tex not in (512, 1024, 2048):
-        raise ValueError("Use texturas de 512, 1024 ou 2048 px.")
+    if tex not in (512, 1024, 2048, 4096):
+        raise ValueError("Use texturas de 512, 1024, 2048 ou 4096 px.")
     src_abs = src.resolve()
     target = (dest / name).resolve()
     if target == src_abs.parent or src_abs.is_relative_to(target):
@@ -61,7 +61,7 @@ def validate_config(data: dict) -> dict:
 
 
 def create_instructions(destination: Path, name: str, stats: dict) -> None:
-    guide = f"""ASTRONYX MINI FORGE V1.6 — {name}
+    guide = f"""ASTRONYX MINI FORGE V2.2.2 — {name}
 ==============================================
 
 RESULTADO OFICIAL DO TALESPIRE
@@ -112,6 +112,6 @@ def write_manifest(destination: Path, cfg: dict, stats: dict):
                   if key not in ("source", "output_root")}
     public_cfg["original_filename"] = Path(cfg["source"]).name
     (destination / "conversao.json").write_text(
-        json.dumps({"app": "Astronyx Mini Forge", "version": "1.6", "settings": public_cfg,
+        json.dumps({"app": "Astronyx Mini Forge", "version": "2.2.2", "settings": public_cfg,
                     "stats": stats, "official_tsmod_created": False}, ensure_ascii=False, indent=2),
         encoding="utf-8")

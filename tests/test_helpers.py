@@ -46,3 +46,13 @@ class TestForge(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class UltraQualityTests(unittest.TestCase):
+    def test_4096_textures_accepted(self):
+        from core.helpers import validate_config
+        with tempfile.TemporaryDirectory() as folder:
+            src=Path(folder)/'model.glb'
+            src.write_bytes(b'fake')
+            settings=validate_config({'source':str(src),'output_root':str(Path(folder)/'out'),
+                                      'height':1.75,'tris':120000,'texture_size':4096})
+            self.assertEqual(settings['texture_size'],4096)
