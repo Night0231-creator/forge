@@ -117,10 +117,13 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
                       target_height: float | None = None) -> Path:
     """Create exact official files, without affecting original 3D materials."""
     folder = Path(folder).resolve()
-    source_stats = inspect_obj(folder / 'TaleWeaverCmd_Source' / f'{name}.obj')
-    scale_factor = (suggest_safe_factor(source_stats, float(target_height)) if target_height is not None
+    # Manual mode stays backwards compatible with already-prepared OBJ files.
+    # Detailed geometry inspection is mandatory only for automatic scaling.
+    source_stats = (inspect_obj(folder / 'TaleWeaverCmd_Source' / f'{name}.obj')
+                    if target_height is not None else None)
+    scale_factor = (suggest_safe_factor(source_stats, float(target_height)) if source_stats is not None
                     else float(scale_factor))
-    actual_height = source_stats.height * scale_factor
+    actual_height = (source_stats.height if source_stats is not None else height) * scale_factor
     if not math.isfinite(scale_factor) or not 0.1 <= scale_factor <= 100:
         raise ValueError('Multiplicador de escala deve ficar entre 0,1 e 100.')
     source = folder / 'TaleWeaverCmd_Source'
@@ -150,10 +153,10 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
     paramfile.write_text(json.dumps(params, ensure_ascii=False, indent=2), encoding='utf-8')
     ensure_cmd_files(stage)
     scale_metadata.write_text(json.dumps({'scale_factor': scale_factor, 'original_height': height,
-                                           'source_height': source_stats.height,
+                                           'source_height': (source_stats.height if source_stats else height),
                                            'effective_height': actual_height,
-                                           'width': source_stats.width * scale_factor,
-                                           'depth': source_stats.depth * scale_factor}, indent=2), encoding='utf-8')
+                                           'width': (source_stats.width * scale_factor if source_stats else None),
+                                           'depth': (source_stats.depth * scale_factor if source_stats else None)}, indent=2), encoding='utf-8')
     return stage
 
 
