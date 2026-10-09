@@ -26,4 +26,4 @@ class PackagedSelfTest(unittest.TestCase):
         result = subprocess.run([sys.executable, str(PROJECT/'studio.py'), '--version'],
                                 capture_output=True, text=True, cwd=PROJECT, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('2.2.2', result.stdout)
+        self.assertIn('2.2.3', result.stdout)
