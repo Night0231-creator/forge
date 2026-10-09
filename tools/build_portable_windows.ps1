@@ -4,6 +4,8 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) { throw 'Python nao encontrado na compilacao.' }
+& python -m pip install --upgrade pyinstaller
+if ($LASTEXITCODE -ne 0) { throw 'PyInstaller indisponivel no interpretador de build.' }
 & python -m PyInstaller --noconfirm --clean --noupx --onedir --contents-directory '_internal' --windowed --name AstronyxMiniForgeStudio --icon 'assets\astronyx.ico' --version-file 'installer\windows_version_info.txt' --add-data 'core\blender_pipeline.py;core' --add-data 'assets;assets' --distpath 'dist\portablebuild' --workpath 'build\portable' studio.py
 if ($LASTEXITCODE -ne 0) { throw 'Falha na compilacao portatil.' }
 $folder = Join-Path $root 'dist\portablebuild\AstronyxMiniForgeStudio'
