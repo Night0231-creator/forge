@@ -20,6 +20,7 @@ from core.library import scan_library, Miniature
 from core.preferences import open_output_folder
 from core.version import APP_VERSION
 from ui import hud22
+from ui.texture_viewer import TexturedObjViewer
 from core.updater import find_update, download_installer, run_installer, UpdateError
 
 
@@ -140,6 +141,7 @@ class UpdateInterface:
 
 
 class Studio(UpdateInterface, legacy.Forge):
+    viewer_class = TexturedObjViewer
     NAV = [
         ('home', '⌂', 'Dashboard', 'tab_dashboard'),
         ('studio', '◈', 'Studio 3D', 'tab_preview'),
@@ -268,6 +270,7 @@ class Studio(UpdateInterface, legacy.Forge):
         self._draw_library()
         hud22.dashboard(self)
         hud22.inspector(self)
+        self.viewer.add_preview_controls(self.tab_preview)
         self.tabs.bind('<<NotebookTabChanged>>', self._tab_switched)
         self._navigate('home', 'tab_dashboard')
         tk.Label(self, text='Ferramenta independente; não afiliada ao TaleSpire, Bouncyrock ou Meshy.',
