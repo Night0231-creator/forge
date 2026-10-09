@@ -34,7 +34,7 @@ O **único executável de instalação destinado aos amigos** fica na página de
 [Documentação para desenvolvedores](docs/DESENVOLVIMENTO.md)
 
 
-## Novidades V2.2.3
+## Histórico: melhorias introduzidas na V2.2.0
 
 - HUD híbrido Blender + Astronyx, dashboard e galeria de personagens com pesquisa.
 - Prévia geométrica, aramada e albedo/UV com controles de câmera.
@@ -46,8 +46,8 @@ O **único executável de instalação destinado aos amigos** fica na página de
 Assinar o programa e o instalador com um certificado confiável, mantendo o mesmo editor nas próximas versões, e permitir que a reputação seja estabelecida; alternativamente, distribuir pela Microsoft Store. Não é possível prometer ausência de aviso apenas alterando o código.
 
 
-## V2.2.3 — Escala e qualidade
-A correção limita a escala automática pela altura e pela base visual (largura/profundidade), preserva mais detalhes com os presets Alta e Ultra e melhora as normais da malha. Ultra é opcional: 4096 px consome bastante memória. Consulte [notas da V2.2.3](docs/V2_2_2_SCALE_QUALITY.md). A opção portátil para Windows 10/11 continua disponível.
+## Histórico: V2.2.2 — Escala e qualidade
+A correção limita a escala automática pela altura e pela base visual (largura/profundidade), preserva mais detalhes com os presets Alta e Ultra e melhora as normais da malha. Ultra é opcional: 4096 px consome bastante memória. Consulte [notas da V2.2.2](docs/V2_2_2_SCALE_QUALITY.md). A opção portátil para Windows 10/11 continua disponível.
 
 
 ## Astronyx V2.2.3 — HUD refinado
