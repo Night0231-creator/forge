@@ -1,5 +1,5 @@
 #define StudioName "Astronyx Mini Forge Studio"
-#define StudioVersion "2.2.3"
+#define StudioVersion "2.2.4"
 [Setup]
 AppId={{C31F9C66-FF88-4C88-87F4-41618861D139}
 AppName={#StudioName}
@@ -10,12 +10,12 @@ AppSupportURL=https://github.com/Night0231-creator/forge/issues
 AppUpdatesURL=https://github.com/Night0231-creator/forge/releases/latest
 VersionInfoCompany=Astronyx
 VersionInfoDescription=Astronyx Mini Forge Studio - Instalador Windows
-VersionInfoVersion=2.2.3.0
+VersionInfoVersion=2.2.4.0
 VersionInfoProductName={#StudioName}
 DefaultDirName={localappdata}\Programs\AstronyxMiniForgeStudio
 DefaultGroupName=Astronyx Mini Forge Studio
 OutputDir=..\dist\installer
-OutputBaseFilename=AstronyxMiniForgeStudio-Setup-v2.2.3
+OutputBaseFilename=AstronyxMiniForgeStudio-Setup-v2.2.4
 SetupIconFile=..\assets\astronyx.ico
 Compression=lzma2
 SolidCompression=yes
@@ -25,12 +25,14 @@ UninstallDisplayIcon={app}\AstronyxMiniForgeStudio.exe
 DisableProgramGroupPage=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+CloseApplications=yes
+RestartApplications=no
 
 [Languages]
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
 
 [Files]
-Source: "..\dist\AstronyxMiniForgeStudio.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\AstronyxMiniForgeStudio\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Astronyx Mini Forge Studio"; Filename: "{app}\AstronyxMiniForgeStudio.exe"

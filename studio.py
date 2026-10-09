@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V2.2.3.
+"""Astronyx Mini Forge Studio V2.2.4.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -172,7 +172,7 @@ class Studio(UpdateInterface, legacy.Forge):
         self._active_nav_key = 'home'
         super().__init__()
         self._begin_updates()
-        self.title('Astronyx Mini Forge Studio V2.2.3 • Meshy → TaleSpire')
+        self.title('Astronyx Mini Forge Studio V2.2.4 • Meshy → TaleSpire')
         if os.name == 'nt':
             try:
                 self.iconbitmap(str(legacy.BASE / 'assets' / 'astronyx.ico'))
@@ -198,7 +198,7 @@ class Studio(UpdateInterface, legacy.Forge):
         brand.pack(fill='x', padx=20, pady=(21, 18))
         tk.Label(brand, text='✦  ASTRONYX', fg=polish.ACCENT_HOVER, bg=SIDEBAR,
                  font=('Segoe UI', 17, 'bold')).pack(anchor='w')
-        tk.Label(brand, text='MINI FORGE  /  V2.2.3', fg=polish.SUBTLE, bg=SIDEBAR,
+        tk.Label(brand, text='MINI FORGE  /  V2.2.4', fg=polish.SUBTLE, bg=SIDEBAR,
                  font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(6, 0))
         tk.Frame(sidebar, height=1, bg=polish.BORDER).pack(fill='x', padx=18, pady=(0, 12))
 
@@ -515,7 +515,7 @@ def run_packaged_selftest(report_file: str) -> int:
     import json
     import sys
     result = {
-        'version': '2.2.3',
+        'version': '2.2.4',
         'frozen': bool(getattr(sys, 'frozen', False)),
         'test': 'resource_and_tcl_smoke',
         'checked': {},
@@ -548,7 +548,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 2.2.3')
+            print('Astronyx Mini Forge Studio 2.2.4')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''
