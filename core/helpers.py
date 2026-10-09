@@ -33,14 +33,14 @@ def validate_config(data: dict) -> dict:
     name = safe_slug(str(data.get("name", src.stem)))
     height = float(data.get("height", 1.75))
     angle = float(data.get("rotation", 0))
-    tris = int(data.get("tris", 11000))
-    tex = int(data.get("texture_size", 1024))
+    tris = int(data.get("tris", 100000))
+    tex = int(data.get("texture_size", 2048))
     if not (0.1 <= height <= 40):
         raise ValueError("A altura precisa estar entre 0,1 e 40 unidades.")
     if not (-360 <= angle <= 360):
         raise ValueError("A rotação deve ficar entre -360° e +360°.")
-    if not (500 <= tris <= 50000):
-        raise ValueError("O limite deve ficar entre 500 e 50.000 triângulos.")
+    if not (500 <= tris <= 120000):
+        raise ValueError("O limite deve ficar entre 500 e 120.000 triângulos.")
     if tex not in (512, 1024, 2048):
         raise ValueError("Use texturas de 512, 1024 ou 2048 px.")
     src_abs = src.resolve()

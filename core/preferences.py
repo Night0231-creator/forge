@@ -25,9 +25,14 @@ def load_preferences(path: Path) -> dict:
         'cmd_executable': settings.get('cmd_executable', ''),
         'cmd_arguments': settings.get('cmd_arguments', ''),
         'cmd_json_template': settings.get('cmd_json_template', ''),
-        'scale_factor': settings.get('scale_factor', '8'),
+        # Migrate the unsafe 14-unit / 8x legacy baseline once.
+        'scale_factor': ('1' if settings.get('settings_schema', 1) < 2
+                         and str(settings.get('scale_factor', '8')) == '8'
+                         else str(settings.get('scale_factor', '1'))),
         'auto_scale': settings.get('auto_scale', True) is True,
-        'target_height': str(settings.get('target_height', '14')),
+        'target_height': ('1.75' if settings.get('settings_schema', 1) < 2
+                          and str(settings.get('target_height', '14')).strip() in ('14', '14.0')
+                          else str(settings.get('target_height', '1.75'))),
         'install_after_conversion': settings.get('install_after_conversion', False) is True,
         'tsmod_folder': settings.get('tsmod_folder', ''),
     }
@@ -36,12 +41,13 @@ def load_preferences(path: Path) -> dict:
 def save_preferences(path: Path, *, output_root: str, blender: str,
                      open_after_conversion: bool, cmd_enabled: bool = False,
                      cmd_executable: str = "", cmd_arguments: str = "",
-                     cmd_json_template: str = "", scale_factor: str = "8",
-                     auto_scale: bool = True, target_height: str = "14",
+                     cmd_json_template: str = "", scale_factor: str = "1",
+                     auto_scale: bool = True, target_height: str = "1.75",
                      install_after_conversion: bool = False, tsmod_folder: str = "") -> None:
     """Save app preferences atomically without touching projects or models."""
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
+        'settings_schema': 2,
         'output_root': output_root,
         'blender': blender,
         'open_after_conversion': bool(open_after_conversion),

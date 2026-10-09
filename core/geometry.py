@@ -1,7 +1,7 @@
 """OBJ mesh inspection and a reference-based size suggestion.
 
 This tool does not know TaleSpire's intended height for every species; the
-14-unit human reference is an empirical starting point, not a game standard.
+14-unit preset was oversized; use 1.75 as conservative baseline, not game standard.
 """
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def inspect_obj(path: Path, max_faces: int | None = None):
     return stats, vertices, faces
 
 
-def suggest_factor(obj_height: float, reference_height: float = 14.0) -> float:
+def suggest_factor(obj_height: float, reference_height: float = 1.75) -> float:
     """Scale from current OBJ Y-height to a selected reference height."""
     if (not math.isfinite(obj_height) or not math.isfinite(reference_height)
             or obj_height <= 1e-6 or not 0.5 <= reference_height <= 40):

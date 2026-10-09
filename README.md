@@ -58,3 +58,11 @@ A ação do GitHub agora impede publicar artefatos quando falhar o autoteste do 
 Com o executável compilado, rode `AstronyxMiniForgeStudio.exe --self-test relatorio.json` para diagnosticar a distribuição sem abrir a interface. A pasta `dist` também terá `validation-portable.json`, `validation-installer.json` e `SHA256SUMS.txt` na execução da ação.
 
 **Sem acesso ao compilador Windows nesta sessão:** este ZIP traz os arquivos de compilação e testes, mas **não inclui nenhum `.exe` pré-compilado**. Para gerar os executáveis, use a ação GitHub no seu repositório ou execute o script `tools\build_windows.ps1` em um Windows com Python e Inno Setup.
+
+## V2.0.2 – beta de escala/qualidade
+
+O valor inicial 14 foi reduzido para 1,75 (aumento 8x fazia o jogo tratar o modelo como gigante). Migração dos presets antigos; textura padrão 2048; perfil detalhado até 100 mil triângulos, sempre respeitando até 60 mil vértices; UV original mantido nos modelos com apenas um material. 
+
+Para recuperar polígonos e detalhes de textura, é preciso converter **novamente o arquivo original do Meshy**. Repetir apenas .tsMod reaproveita a malha antiga. O programa não exporta esqueleto/animação de caminhada; o movimento da miniatura depende do TaleSpire.
+
+Esta atualização é **experimental**, não validada visualmente com Blender/TaleWeaverCmd reais. Consulte NOTAS_CORRECAO_QUALIDADE.md.

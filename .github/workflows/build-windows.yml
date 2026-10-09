@@ -1,4 +1,4 @@
-name: Astronyx Mini Forge Studio 2.0.1 Windows
+name: Astronyx Mini Forge Studio 2.0.2 Windows
 on:
   workflow_dispatch:
   push:
@@ -28,7 +28,7 @@ jobs:
       - name: Gerar hashes SHA256
         shell: powershell
         run: |
-          $files = @('dist/AstronyxMiniForgeStudio.exe', 'dist/installer/AstronyxMiniForgeStudio-Setup-v2.0.1.exe')
+          $files = @('dist/AstronyxMiniForgeStudio.exe', 'dist/installer/AstronyxMiniForgeStudio-Setup-v2.0.2.exe')
           foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
@@ -52,5 +52,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Setup
-          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.0.1.exe
+          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.0.2.exe
           if-no-files-found: error

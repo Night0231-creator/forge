@@ -161,6 +161,8 @@ def normalize_model(obj, cfg):
 
 def optimize(obj, desired_faces):
     activate(obj)
+    source_faces = len(obj.data.polygons)
+    source_vertices = len(obj.data.vertices)
     # We triangulate explicitly. TaleWeaverLite requires one triangle mesh.
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -188,11 +190,27 @@ def optimize(obj, desired_faces):
     obj.data.update()
     if len(obj.data.vertices) > 60000:
         raise ValueError('O modelo ainda excede 60.000 vertices. Reduza o limite de triangulos.')
-    return {'vertices': len(obj.data.vertices), 'triangles': len(obj.data.polygons)}
+    if source_faces and len(obj.data.polygons) < source_faces * 0.55:
+        print('AMF_WARNING|Malha reduzida mais de 45 por cento; detalhes finos podem mudar.', flush=True)
+    return {'vertices': len(obj.data.vertices), 'triangles': len(obj.data.polygons),
+            'original_vertices': source_vertices, 'original_faces': source_faces}
 
 
 def make_uv_atlas(obj):
+    """Retain original UVs for a single material; otherwise build an atlas.
+
+    Repacking a valid single-material Meshy UV into tiny islands can blur faces,
+    ornaments and armor even with a 2048px texture.
+    """
     activate(obj)
+    used_materials = [m for m in obj.data.materials if m]
+    original = obj.data.uv_layers.get('AMF_Original')
+    if original is not None and len(used_materials) <= 1:
+        obj.data.uv_layers.active = original
+        original.active_render = True
+        print('AMF_PROGRESS|53|UV original do Meshy preservado', flush=True)
+        return original.name
+    print('AMF_WARNING|UVs requerem atlas (multiplos materiais ou sem UV); reveja detalhes finos.', flush=True)
     if obj.data.uv_layers.get('AMF_Atlas') is None:
         obj.data.uv_layers.new(name='AMF_Atlas')
     layer = obj.data.uv_layers['AMF_Atlas']
@@ -202,6 +220,7 @@ def make_uv_atlas(obj):
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.uv.smart_project(island_margin=0.01)
     bpy.ops.object.mode_set(mode='OBJECT')
+    return layer.name
 
 
 def new_image(name, size, *, is_data=False):
@@ -301,7 +320,7 @@ def blank_normal(size):
 
 def bake_textures(obj, folder, size):
     status(52, 'Criando atlas de UV e texturas')
-    make_uv_atlas(obj)
+    uv_name = make_uv_atlas(obj)
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.device = 'CPU'
     albedo = new_image('AMF_Albedo', size)
@@ -336,23 +355,23 @@ def bake_textures(obj, folder, size):
     packed.pixels.foreach_set(a)
     packed.update()
     save_image(packed, folder / 'MAES.png')
-    return albedo, normal
+    return albedo, normal, uv_name
 
 
-def assign_final_material(obj, albedo_image):
+def assign_final_material(obj, albedo_image, uv_name):
     mat = bpy.data.materials.new(name='AstronyxMini')
     mat.use_nodes = True
     bsdf = next(n for n in mat.node_tree.nodes if n.type == 'BSDF_PRINCIPLED')
     tex = mat.node_tree.nodes.new('ShaderNodeTexImage')
     tex.image = albedo_image
     uv = mat.node_tree.nodes.new('ShaderNodeUVMap')
-    uv.uv_map = 'AMF_Atlas'
+    uv.uv_map = uv_name
     mat.node_tree.links.new(uv.outputs['UV'], tex.inputs['Vector'])
     mat.node_tree.links.new(tex.outputs['Color'], bsdf.inputs['Base Color'])
     obj.data.materials.clear()
     obj.data.materials.append(mat)
-    obj.data.uv_layers.active = obj.data.uv_layers['AMF_Atlas']
-    obj.data.uv_layers['AMF_Atlas'].active_render = True
+    obj.data.uv_layers.active = obj.data.uv_layers[uv_name]
+    obj.data.uv_layers[uv_name].active_render = True
 
 
 def export_fbx(obj, folder, name):
@@ -469,9 +488,15 @@ def main():
     status(35, 'Reduzindo triangulos e verificando limites')
     stats = optimize(obj, cfg['tris'])
     stats['height'] = cfg['height']
+    bounds = metrics(obj)
+    stats['width'] = bounds[1] - bounds[0]
+    stats['depth'] = bounds[3] - bounds[2]
+    if max(stats['width'], stats['depth']) > cfg['height'] * 1.8:
+        print('AMF_WARNING|Modelo muito largo ou profundo; a base pode ser maior por causa de asas e acessorios.', flush=True)
     status(45, f"Malha pronta: {stats['vertices']} vertices / {stats['triangles']} triangulos")
-    albedo, _ = bake_textures(obj, tw, cfg['texture_size'])
-    assign_final_material(obj, albedo)
+    albedo, _, used_uv = bake_textures(obj, tw, cfg['texture_size'])
+    stats['uv_mode'] = 'original' if used_uv == 'AMF_Original' else 'repacked'
+    assign_final_material(obj, albedo, used_uv)
     status(89, 'Exportando modelo FBX para TaleWeaverLite')
     export_fbx(obj, tw, cfg['name'])
     if cfg.get('create_taleweavercmd', False):

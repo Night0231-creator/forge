@@ -73,16 +73,16 @@ class Forge(tk.Tk):
         self.name.trace_add('write', lambda *_: self._update_output_preview())
         self.target.trace_add('write', lambda *_: self._update_output_preview())
         self._update_output_preview()
-        self.scale_factor = tk.StringVar(value=str(stored.get('scale_factor', '8')))
+        self.scale_factor = tk.StringVar(value=str(stored.get('scale_factor', '1')))
         self.auto_scale = tk.BooleanVar(value=stored.get('auto_scale', True))
-        self.target_height = tk.StringVar(value=stored.get('target_height','14'))
-        self.quality = tk.StringVar(value='Equilibrado')
+        self.target_height = tk.StringVar(value=stored.get('target_height','1.75'))
+        self.quality = tk.StringVar(value='Detalhado')
         self.preview_info = tk.StringVar(value='Converta um modelo ou abra o OBJ preparado.')
         self._thumbnail_img = None
         self.height = tk.StringVar(value='1.75')
         self.rotation = tk.StringVar(value='0')
-        self.tris = tk.StringVar(value='11000')
-        self.resolution = tk.StringVar(value='1024')
+        self.tris = tk.StringVar(value='100000')
+        self.resolution = tk.StringVar(value='2048')
         self.plugin = tk.BooleanVar(value=True)
         self.tsmod_file = tk.StringVar(value='')
         self.tsmod_folder = tk.StringVar(value=str(stored.get('tsmod_folder') or guess_talespire_content_folder() or ''))
@@ -241,8 +241,8 @@ class Forge(tk.Tk):
 
         card, body = self._card(shell, '03  ·  Criar miniatura')
         card.pack(fill='x', pady=(0, 6))
-        self._label(body, 'Ajuste automático para humanoides: altura de referência 14 unidades '
-                    '(estimativa que deve ser conferida no jogo). Outras escalas estão em GERAR .TSMOD.',
+        self._label(body, 'Tamanho inicial de humanoide: 1,75 unidade (escala 1x). Evite valores como 14: '
+                    'eles podem fazer o jogo tratar o personagem como gigante. Ajuste em GERAR .TSMOD.',
                     fg=MUTED, wraplength=805, font=('Segoe UI', 9)).pack(anchor='w', pady=(3, 12))
         actions = tk.Frame(body, bg=PANEL)
         actions.pack(fill='x')
@@ -323,7 +323,7 @@ class Forge(tk.Tk):
         settings = [
             ('ALTURA (UNIDADES)', self.height, '1.75'),
             ('GIRAR EM Z (GRAUS)', self.rotation, '0'),
-            ('MÁX. TRIÂNGULOS', self.tris, '11000'),
+            ('MÁX. TRIÂNGULOS', self.tris, '100000'),
         ]
         for index, (title, variable, default) in enumerate(settings):
             cell = tk.Frame(row, bg=PANEL)
@@ -378,9 +378,9 @@ class Forge(tk.Tk):
             self.quick_canvas.yview_scroll(-int(event.delta / 120), 'units')
 
     def _apply_quality(self, _event=None):
-        faces, resolution = {'Leve': ('5000','512'),
-                             'Equilibrado': ('11000','1024'),
-                             'Detalhado': ('20000','2048')}[self.quality.get()]
+        faces, resolution = {'Leve': ('18000','1024'),
+                             'Equilibrado': ('45000','2048'),
+                             'Detalhado': ('100000','2048')}[self.quality.get()]
         self.tris.set(faces)
         self.resolution.set(resolution)
 
@@ -433,7 +433,7 @@ class Forge(tk.Tk):
             self.viewer.open(obj)
             stats=self.viewer.stats
             try:
-                suggested=f'{suggest_factor(stats.height,14):.2f}x'
+                suggested=f'{suggest_factor(stats.height,1.75):.2f}x'
             except ValueError:
                 suggested='fora do intervalo automático'
             text=(f'{stats.vertices:,} vértices\n{stats.faces:,} faces\n'
@@ -515,16 +515,16 @@ class Forge(tk.Tk):
         refrow=tk.Frame(body,bg=PANEL)
         refrow.pack(fill='x',pady=(0,12))
         self._label(refrow,'ALTURA ALVO NO TALESPIRE').pack(side='left',padx=(0,12))
-        ref=ttk.Combobox(refrow,textvariable=self.target_height,values=('7','14','20','28'),width=9)
+        ref=ttk.Combobox(refrow,textvariable=self.target_height,values=('1.25','1.75','2','2.5','3.5'),width=9)
         ref.pack(side='left')
         ref.bind('<<ComboboxSelected>>',lambda _e:self._save_settings())
-        self._label(refrow,'7 = pequeno  ·  14 = humano  ·  20/28 = criatura grande',fg=MUTED).pack(side='left',padx=12)
+        self._label(refrow,'1,75 = ponto inicial humanoide; confira o resultado dentro do TaleSpire',fg=MUTED).pack(side='left',padx=12)
         self._label(body, 'MULTIPLICADOR MANUAL (usado se desmarcar escala automática)', fg=ACCENT).pack(anchor='w', pady=(6, 5))
-        choices = ttk.Combobox(body, textvariable=self.scale_factor, values=('1', '2', '4', '6', '8', '10', '12', '15', '20'), width=12)
+        choices = ttk.Combobox(body, textvariable=self.scale_factor, values=('0.75', '1', '1.25', '1.5', '2', '2.5', '3', '4'), width=12)
         choices.pack(anchor='w', pady=(0, 4))
         choices.bind('<<ComboboxSelected>>', lambda _event: self._save_settings())
-        self._label(body, 'No modo manual, experimente 8 e compare no jogo. '
-                    'Se precisar, teste 10 ou 12. Isso nao muda o OBJ original nem refaz o Blender.',
+        self._label(body, 'No modo manual, comece em 1x e aumente em passos pequenos, como 1,25x. '
+                    'Evite 8x: o TaleSpire pode tratar a miniatura como gigante.',
                     fg=MUTED, wraplength=840).pack(anchor='w', pady=(0, 15))
         toolbar = tk.Frame(body, bg=PANEL)
         toolbar.pack(fill='x', pady=(0, 16))
@@ -593,7 +593,7 @@ class Forge(tk.Tk):
         try:
             value=float(self.target_height.get().strip().replace(',','.'))
         except ValueError:
-            raise ValueError('A altura alvo precisa ser um número: 7, 14 ou 20, por exemplo.')
+            raise ValueError('A altura alvo precisa ser um número: 1,75 ou 2, por exemplo.')
         if not math.isfinite(value) or not 0.5 <= value <= 40:
             raise ValueError('Altura alvo: use um valor entre 0,5 e 40.')
         return value

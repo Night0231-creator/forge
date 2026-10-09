@@ -38,7 +38,7 @@ class TestForge(unittest.TestCase):
             path.write_bytes(b'not actual 3d')
             cfg = {'source': str(path), 'output_root': temp, 'height': 1.75,
                    'rotation': 0, 'tris': 11000, 'texture_size': 1024}
-            for change in ({'texture_size': 3000}, {'tris': 70000}, {'height': -1},
+            for change in ({'texture_size': 3000}, {'tris': 120001}, {'height': -1},
                            {'rotation': 800}):
                 with self.assertRaises(ValueError):
                     validate_config({**cfg, **change})
