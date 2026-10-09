@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, master, v2.2-ui, 'fix/win10-win11-4551', 'fix/v2.2.2-scale-quality', 'feat/v2.2.4-hud-polish']
+    branches: [main, master, v2.2-ui, 'fix/win10-win11-4551', 'fix/v2.2.2-scale-quality', 'feat/v2.2.3-hud-polish', 'fix/v2.2.4-safe-updater']
     tags: ['v*']
 
 jobs:
@@ -42,7 +42,7 @@ jobs:
       - name: Gerar hashes SHA256
         shell: powershell
         run: |
-          $files = @(''dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.4.exe', 'dist/AstronyxMiniForgeStudio-Portable-v2.2.4-Win10-Win11-x64.zip')
+          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.4.exe', 'dist/AstronyxMiniForgeStudio-Portable-v2.2.4-Win10-Win11-x64.zip')
           foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
