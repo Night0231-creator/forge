@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V2.0.
+"""Astronyx Mini Forge Studio V2.2 Preview.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -19,6 +19,7 @@ import app as legacy
 from core.library import scan_library, Miniature
 from core.preferences import open_output_folder
 from core.version import APP_VERSION
+from ui import hud22
 from core.updater import find_update, download_installer, run_installer, UpdateError
 
 
@@ -140,11 +141,12 @@ class UpdateInterface:
 
 class Studio(UpdateInterface, legacy.Forge):
     NAV = [
-        ('home', '✦', 'Início rápido', 'tab_quick'),
-        ('library', '▦', 'Minhas miniaturas', 'tab_library'),
-        ('preview', '◈', 'Prévia 3D', 'tab_preview'),
-        ('scale', '⚙', 'Ajustes avançados', 'tab_conv'),
-        ('export', '⬡', 'Gerar .tsMod', 'tab_cmd'),
+        ('home', '⌂', 'Dashboard', 'tab_dashboard'),
+        ('studio', '◈', 'Studio 3D', 'tab_preview'),
+        ('library', '▦', 'Biblioteca', 'tab_library'),
+        ('convert', '⬡', 'Converter', 'tab_quick'),
+        ('scale', '⚙', 'Ferramentas', 'tab_conv'),
+        ('export', '↗', 'Gerar .tsMod', 'tab_cmd'),
         ('install', '↓', 'Instalar no TaleSpire', 'tab_tsmod'),
         ('help', '?', 'Ajuda e tutorial', 'tab_guide'),
     ]
@@ -155,14 +157,14 @@ class Studio(UpdateInterface, legacy.Forge):
         self.library_image_refs = []
         super().__init__()
         self._begin_updates()
-        self.title('Astronyx Mini Forge Studio 2.1.0 • Meshy → TaleSpire')
+        self.title('Astronyx Mini Forge Studio V2.2 Preview • Meshy → TaleSpire')
         if os.name == 'nt':
             try:
                 self.iconbitmap(str(legacy.BASE / 'assets' / 'astronyx.ico'))
             except tk.TclError:
                 pass
-        self.geometry('1190x800')
-        self.minsize(955, 670)
+        self.geometry('1260x820')
+        self.minsize(1020, 690)
         self.after(80, self.refresh_library)
         self.bind('<Control-o>', lambda _event: self._pick_source())
         self.bind('<Control-l>', lambda _event: self._navigate('library', 'tab_library'))
@@ -180,7 +182,7 @@ class Studio(UpdateInterface, legacy.Forge):
         brand.pack(fill='x', padx=21, pady=(23, 20))
         tk.Label(brand, text='✦  ASTRONYX', fg='#B998FF', bg=SIDEBAR,
                  font=('Segoe UI', 17, 'bold')).pack(anchor='w')
-        tk.Label(brand, text='MINI FORGE  /  STUDIO 2.1.0', fg='#8387A9', bg=SIDEBAR,
+        tk.Label(brand, text='MINI FORGE  /  V2.2 PREVIEW', fg='#8387A9', bg=SIDEBAR,
                  font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(6, 0))
         tk.Frame(sidebar, height=1, bg='#30314D').pack(fill='x', padx=18, pady=(0, 13))
 
@@ -206,7 +208,7 @@ class Studio(UpdateInterface, legacy.Forge):
         hero.pack_propagate(False)
         left = tk.Frame(hero, bg='#15152A')
         left.pack(side='left', fill='both', expand=True, padx=(24, 4), pady=(17, 9))
-        tk.Label(left, text='Seu estúdio de miniaturas 3D', bg='#15152A', fg=FG,
+        tk.Label(left, text='Astronyx Character Studio', bg='#15152A', fg=FG,
                  font=('Segoe UI', 20, 'bold'), anchor='w').pack(anchor='w')
         tk.Label(left, text='Meshy  →  Blender  →  TaleWeaverCmd  →  TaleSpire',
                  bg='#15152A', fg='#9A93BE', font=('Segoe UI', 10)).pack(anchor='w', pady=(6, 0))
@@ -233,7 +235,7 @@ class Studio(UpdateInterface, legacy.Forge):
         self.tabs = ttk.Notebook(view, style='StudioHidden.TNotebook')
         self.tabs.pack(fill='both', expand=True)
         for attr, label in [
-            ('tab_quick', 'Início'), ('tab_library', 'Biblioteca'),
+            ('tab_dashboard', 'Dashboard'), ('tab_quick', 'Converter'), ('tab_library', 'Biblioteca'),
             ('tab_preview', 'Prévia'), ('tab_conv', 'Ajustes'),
             ('tab_cmd', 'Exportar'), ('tab_tsmod', 'Instalar'),
             ('tab_guide', 'Ajuda')]:
@@ -264,8 +266,10 @@ class Studio(UpdateInterface, legacy.Forge):
         self._draw_cmd_setup()
         self._draw_preview()
         self._draw_library()
+        hud22.dashboard(self)
+        hud22.inspector(self)
         self.tabs.bind('<<NotebookTabChanged>>', self._tab_switched)
-        self._navigate('home', 'tab_quick')
+        self._navigate('home', 'tab_dashboard')
         tk.Label(self, text='Ferramenta independente; não afiliada ao TaleSpire, Bouncyrock ou Meshy.',
                  bg=legacy.BG, fg='#656B85', font=('Segoe UI', 8)).pack(side='bottom', pady=(0, 4))
 
@@ -304,6 +308,17 @@ class Studio(UpdateInterface, legacy.Forge):
         bar = tk.Frame(parent, bg=legacy.BG)
         bar.pack(fill='x', padx=7)
         self.library_summary = tk.StringVar(value='Carregando miniaturas...')
+        self.library_search = tk.StringVar(value='')
+        self.library_filter = tk.StringVar(value='Todos')
+        filters = tk.Frame(parent, bg=legacy.BG)
+        filters.pack(fill='x', padx=7, pady=(6, 8))
+        tk.Label(filters, text='Pesquisar', bg=legacy.BG, fg=MUTED).pack(side='left', padx=(0, 9))
+        ttk.Entry(filters, textvariable=self.library_search, width=32).pack(side='left', padx=(0, 14))
+        ttk.Combobox(filters, textvariable=self.library_filter,
+                     values=('Todos', 'Prontos', 'Em preparação'),
+                     state='readonly', width=18).pack(side='left')
+        self.library_search.trace_add('write', lambda *_: self.refresh_library())
+        self.library_filter.trace_add('write', lambda *_: self.refresh_library())
         tk.Label(bar, textvariable=self.library_summary, bg=legacy.BG, fg=GREEN,
                  font=('Segoe UI', 10, 'bold')).pack(side='left')
         self.library_scroll = tk.Canvas(parent, bg=legacy.BG, highlightthickness=0)
@@ -339,8 +354,12 @@ class Studio(UpdateInterface, legacy.Forge):
             tk.Label(canvas, text='Converta seu primeiro personagem na aba Início rápido.\n'
                                   'As miniaturas vão aparecer aqui automaticamente.',
                      bg=PANEL, fg=MUTED, font=('Segoe UI', 10), justify='center').pack(pady=(0, 26))
-        for item in self.library_entries:
-            self._library_row(item)
+        filtered = hud22.filter_miniatures(self.library_entries,
+                   self.library_search.get(), self.library_filter.get())
+        self.library_summary.set(f'{len(filtered)} exibidos / {len(self.library_entries)} projetos    •    {ready} .tsMod prontos')
+        for index, item in enumerate(filtered):
+            hud22.gallery_card(self, item, index)
+        hud22.refresh_dashboard(self)
 
     def _library_row(self, item: Miniature):
         box = tk.Frame(self.library_frame, bg=PANEL, highlightbackground=legacy.BORDER,
