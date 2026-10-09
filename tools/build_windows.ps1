@@ -16,6 +16,8 @@ if (-not $python) { throw 'Python 3.10+ necessario apenas neste PC de COMPILACAO
 $exe = $python[0]
 $argsPrefix = @()
 if ($python.Length -gt 1) { $argsPrefix = @($python[1]) }
+& $exe @argsPrefix -m pip install --upgrade pillow numpy
+if ($LASTEXITCODE -ne 0) { throw 'Dependencias de visualizacao 3D nao puderam ser instaladas.' }
 & $exe @argsPrefix -m unittest discover -s tests -q
 if ($LASTEXITCODE -ne 0) { throw 'Os testes falharam: a compilacao foi interrompida.' }
 & $exe @argsPrefix -m pip install --upgrade pyinstaller
