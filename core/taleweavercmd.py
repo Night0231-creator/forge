@@ -28,6 +28,85 @@ IMAGE_MAP = {
 }
 
 
+def _copy_compatible_texture(source: Path, destination: Path) -> None:
+    """Copy texture without overwriting originals; constrain valid PNGs to 2048.
+
+    The TaleWeaverLite guide documents 2048x2048 for official creature textures.
+    Synthetic unit-test fixtures without PNG signatures keep legacy copy behavior.
+    """
+    with source.open('rb') as data:
+        signature = data.read(8)
+    if signature != b'\\x89PNG\\r\\n\\x1a\\n':
+        shutil.copy2(source, destination)
+        return
+    try:
+        from PIL import Image, UnidentifiedImageError
+        with Image.open(source) as picture:
+            if picture.width < 1 or picture.height < 1:
+                raise ValueError('Tamanho de textura invalido: ' + source.name)
+            if picture.width * picture.height > 8192 * 8192:
+                raise ValueError('Textura grande demais para preparar: ' + source.name)
+            if max(picture.size) <= 2048:
+                shutil.copy2(source, destination)
+            else:
+                # Keep the source untouched; the converter only reads the staged PNG.
+                mode = picture.mode if picture.mode in ('RGB', 'RGBA') else 'RGBA'
+                converted = picture.convert(mode)
+                converted.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
+                converted.save(destination, format='PNG')
+    except (OSError, UnidentifiedImageError) as exc:
+        raise ValueError('Textura PNG invalida para TaleWeaverCmd: ' + source.name) from exc
+
+
+def _verify_tool_runtime(executable: Path) -> None:
+    """Check shipped Unity dependencies only for actual Windows PE executables.
+
+    Do not block unit-test fixtures or other platform binaries.
+    """
+    if os.name != 'nt':
+        return
+    with executable.open('rb') as binary:
+        is_pe = binary.read(2) == b'MZ'
+    if not is_pe:
+        return
+    missing = [item for item in ('UnityPlayer.dll', 'TaleWeaverCmd_Data')
+               if not (executable.parent / item).exists()]
+    if missing:
+        raise RuntimeError(
+            'TaleWeaverCmd incompleto: faltam ' + ', '.join(missing)
+            + '. Selecione o executavel original na pasta Windows do TaleSpire. '
+              'Na Steam, use Propriedades > Arquivos instalados > Verificar integridade.'
+        )
+
+
+def _read_log_errors(path: Path, tail: list[str]) -> str:
+    """Return actionable log lines instead of Unity startup memorysetup spam."""
+    lines: list[str] = []
+    try:
+        if path.is_file():
+            with path.open('rb') as stream:
+                stream.seek(0, 2)
+                size = stream.tell()
+                stream.seek(max(0, size - 1024 * 1024))
+                data = stream.read(1024 * 1024)
+            lines.extend(data.decode('utf-8-sig', errors='replace').splitlines())
+    except OSError:
+        pass
+    lines.extend(tail)
+    import re
+    meaningful = [line.strip()[:350] for line in lines
+                  if line.strip() and 'memorysetup-' not in line.casefold()
+                  and 'memorysetup_' not in line.casefold()]
+    important = [line for line in meaningful
+                 if re.search(r'error|exception|failed|fatal|invalid|could not|not found|missing|crash|abort',line,re.I)]
+    if important:
+        return '\\n'.join(important[-8:])
+    return '\\n'.join(meaningful[-8:]) if meaningful else (
+        'O processo encerrou sem um erro explicito no log. Confira se o TaleWeaverCmd '
+        'possui UnityPlayer.dll e TaleWeaverCmd_Data e verifique os arquivos pela Steam.'
+    )
+
+
 def find_taleweavercmd() -> str | None:
     from .discovery import find_taleweavercmd as detect_cmd
     return detect_cmd()
@@ -135,7 +214,7 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
     stage.mkdir(parents=True, exist_ok=True)
     resize_obj_vertices(obj_file, stage / 'model.obj', scale_factor)
     for dest, src in IMAGE_MAP.items():
-        shutil.copy2(source / src, stage / dest)
+        _copy_compatible_texture(source / src, stage / dest)
     paramfile = stage / 'params.json'
     scale_metadata = folder / 'TaleWeaverCmd_escala.json'
     previous_factor = 1.0
@@ -200,6 +279,7 @@ def run_taleweavercmd(executable: Path, folder: Path, name: str,
     executable = Path(executable).resolve()
     if not executable.is_file():
         raise FileNotFoundError('Selecione TaleWeaverCmd.exe na pasta do TaleSpire.')
+    _verify_tool_runtime(executable)
     folder = Path(folder).resolve()
     stage = prepare_cmd_input(folder, name, height, preserve_params=preserve_params,
                               scale_factor=scale_factor, target_height=target_height)
@@ -238,7 +318,13 @@ def run_taleweavercmd(executable: Path, folder: Path, name: str,
     if process.stdout is not None:
         process.stdout.close()
     if code:
-        raise RuntimeError(f'TaleWeaverCmd retornou código {code}. Consulte {log_path}.\n' + '\n'.join(tail[-12:]))
+        hint = _read_log_errors(log_path, tail)
+        raise RuntimeError(
+            f'TaleWeaverCmd retornou código {code}.\n'
+            f'Erro relevante encontrado:\n{hint}\n'
+            f'Log completo: {log_path}\n'
+            'Verifique tambem a pasta Windows do TaleWeaverCmd no diretorio do TaleSpire.'
+        )
     if not output.is_file() or output.stat().st_size < 64:
         raise RuntimeError('TaleWeaverCmd terminou sem criar converted.tsMod válido. '
                            f'Veja o log em {log_path} e os arquivos em {stage}.\n' + '\n'.join(tail[-12:]))
