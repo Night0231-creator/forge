@@ -47,6 +47,7 @@ def user_config_file() -> Path:
 
 
 class Forge(tk.Tk):
+    viewer_class = ObjViewer  # Subclasses can replace the GUI preview; exporter untouched.
     def __init__(self):
         super().__init__()
         self.title('Astronyx Mini Forge · Meshy para TaleSpire')
@@ -397,7 +398,7 @@ class Forge(tk.Tk):
                     bg=BG,wraplength=850).pack(anchor='w',pady=(0,10))
         cols = tk.Frame(holder,bg=BG)
         cols.pack(fill='both',expand=True)
-        self.viewer = ObjViewer(cols,width=530,height=460)
+        self.viewer = self.viewer_class(cols,width=530,height=460)
         self.viewer.pack(side='left',fill='both',expand=True)
         side = tk.Frame(cols,bg=PANEL,width=290)
         side.pack(side='right',fill='y',padx=(10,0))
