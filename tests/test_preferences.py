@@ -2,7 +2,7 @@
 import json
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
 from core.preferences import load_preferences, save_preferences, open_output_folder
@@ -58,7 +58,7 @@ class TestPreferences(unittest.TestCase):
                 proc.assert_called_once()
                 args = proc.call_args.args[0]
                 self.assertEqual(args[0], 'xdg-open')
-                self.assertEqual(Path(args[1]), folder)
+                self.assertEqual(PureWindowsPath(args[1]), PureWindowsPath(str(folder)))
 
 
 if __name__ == '__main__':
