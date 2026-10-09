@@ -7,7 +7,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, master]
+    branches: [main, master, v2.2-ui]
     tags: ['v*']
 
 jobs:
