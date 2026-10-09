@@ -25,6 +25,7 @@ from core.discovery import tool_status
 from core.archive import extract_meshy_zip
 from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
+from core.scale_audit import audit_scale
 from core.preferences import load_preferences, open_output_folder, save_preferences
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
 
@@ -541,6 +542,8 @@ class Forge(tk.Tk):
                     'você pode ajustar Entrada_TaleWeaverCmd/params.json manualmente antes '
                     'de executar novamente. O TaleSpire continua sendo o teste final.',
                     fg=MUTED, font=('Segoe UI', 10), wraplength=840).pack(anchor='w', pady=(0, 19))
+        self._button(body, 'Diagnosticar escala 1×1 de uma miniatura preparada',
+                     self._diagnose_scale, padx=11, pady=8).pack(anchor='w', pady=(0, 10))
         self._button(body, 'Gerar .tsMod de uma pasta já preparada', self._rerun_cmd,
                      accent=True).pack(anchor='w', pady=(4, 12))
         self._label(body, 'Ao repetir a geração, não é necessário passar pelo Blender outra vez. '
@@ -599,6 +602,26 @@ class Forge(tk.Tk):
         if not math.isfinite(value) or not 0.5 <= value <= 40:
             raise ValueError('Altura alvo: use um valor entre 0,5 e 40.')
         return value
+
+    def _diagnose_scale(self):
+        """Preview the automatic scaling formula; never touch the model."""
+        root = Path(self.target.get()).expanduser()
+        folder = filedialog.askdirectory(
+            title='Pasta da miniatura com TaleWeaverCmd_Source',
+            initialdir=str(root) if root.is_dir() else str(Path.home()))
+        if not folder:
+            return
+        destination = Path(folder)
+        obj = destination / 'TaleWeaverCmd_Source' / (destination.name + '.obj')
+        try:
+            target = float(self.target_height.get().strip().replace(',', '.'))
+            report = audit_scale(inspect_obj(obj), target)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Não foi possível diagnosticar', str(exc))
+            return
+        title = ('Escala 1×1: base limita a altura' if report.footprint_limited
+                 else 'Escala 1×1: dimensões dentro da referência')
+        messagebox.showwarning(title, report.summary()) if report.footprint_limited else messagebox.showinfo(title, report.summary())
 
     def _rerun_cmd(self):
         if self.busy:
