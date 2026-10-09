@@ -2,24 +2,30 @@
 
 **Conversor gratuito de personagens 3D do Meshy para miniaturas do TaleSpire.**
 
-## ⬇️ Baixar para Windows
+## ⬇️ Baixar para Windows 10 (22H2 x64) e Windows 11 x64
 
-### [**BAIXAR INSTALADOR ASTRONYX MINI FORGE (.EXE)**](https://github.com/Night0231-creator/forge/releases/latest)
+### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-Abra **Releases → Latest** e baixe **`AstronyxMiniForgeStudio-Setup-v2.2.0.exe`** (ou a versão mais recente).
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.1-Win10-Win11-x64.zip`.
+2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
+3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
+4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
 
-**Para instalar:** execute o Setup.exe e siga o assistente. Não é necessário instalar Python.
+A versão portátil não executa o instalador Inno Setup nem extrai um bootloader PyInstaller dentro de TEMP; isso evita o caminho que provocou o **erro 4551** em alguns Windows 11. **Ainda pode ser bloqueada por políticas de segurança**, pois não tem assinatura digital certificada. Não desligue o Defender, Smart App Control ou políticas da empresa.
 
-**Para converter:** você precisará do Blender e do TaleSpire (com o TaleWeaverCmd incluído na instalação Steam).
+### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-- [Blender oficial](https://www.blender.org/download/)
-- [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/)
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.1.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
-O programa mostra avisos de atualização quando publicarmos novas Releases. Você decide se quer baixar e instalar.
+**Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
-> **Windows 11:** o instalador ainda **não é assinado digitalmente**. A Microsoft pode exibir avisos de SmartScreen ou Smart App Control. Os metadados do programa foram melhorados, mas isso **não substitui assinatura digital**. Distribua apenas pelo GitHub oficial e confira o SHA-256 publicado com cada Release. Não desative o Defender para instalar. Se houver uma detecção específica de malware aparentemente incorreta, envie o arquivo ao portal Microsoft Security Intelligence para análise.
+**Atualizações:** no instalador tradicional, o programa oferece o novo Setup. No modo portátil, mostra a página das Releases para baixar um ZIP novo manualmente.
 
-> **Atenção:** esta ferramenta não é oficial do Meshy nem do TaleSpire. Use modelos que você tenha direito de baixar e converter. Confira tamanho e qualidade no jogo antes de distribuir suas miniaturas.
+**Compatibilidade:** Windows 10 22H2 x64 (versão final do Windows 10) e Windows 11 x64. Os testes automáticos do GitHub Actions usam runners Windows Server 2022 e 2025, que não substituem testes reais em Windows 10/11 de clientes.
+
+**Sobre o bloqueio 4551:** [guia detalhado](docs/WINDOWS10_WINDOWS11_ERRO4551.md).
+
+> Ferramenta independente do Meshy e TaleSpire. Use arquivos que você tenha direito de baixar e converter.
 
 ## Para quem desenvolve o projeto
 
@@ -28,7 +34,7 @@ O **único executável de instalação destinado aos amigos** fica na página de
 [Documentação para desenvolvedores](docs/DESENVOLVIMENTO.md)
 
 
-## Novidades V2.2.0
+## Novidades V2.2.1
 
 - HUD híbrido Blender + Astronyx, dashboard e galeria de personagens com pesquisa.
 - Prévia geométrica, aramada e albedo/UV com controles de câmera.

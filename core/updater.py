@@ -116,7 +116,15 @@ def download_installer(release,progress=None,destination=None):
     finally:
         if temp.exists():temp.unlink()
 
+def is_portable() -> bool:
+    """Portable onedir distribution does not use Inno Setup for updates."""
+    return (sys.platform == 'win32' and bool(getattr(sys, 'frozen', False))
+            and (Path(sys.executable).resolve().parent / '_internal').is_dir())
+
+
 def run_installer(path):
+    if is_portable():
+        raise UpdateError('No modo portátil, baixe o ZIP da Release oficial e substitua a pasta, preservando seus projetos.')
     if sys.platform!='win32' or not getattr(sys,'frozen',False):
         raise UpdateError('Atualização interna exige o .exe Windows')
     p=Path(path)

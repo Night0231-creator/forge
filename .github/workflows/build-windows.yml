@@ -1,4 +1,4 @@
-name: Astronyx Mini Forge Studio 2.2.0 Windows
+name: Astronyx Mini Forge Studio 2.2.1 Windows (Win10/Win11)
 on:
   workflow_dispatch:
     inputs:
@@ -33,10 +33,16 @@ jobs:
       - name: Testar instalador em Windows
         shell: powershell
         run: .\tools\test_installer_windows.ps1
+      - name: Compilar pacote portatil one-dir
+        shell: powershell
+        run: .\tools\build_portable_windows.ps1
+      - name: Testar ZIP portatil extraido
+        shell: powershell
+        run: .\tools\test_portable_windows.ps1
       - name: Gerar hashes SHA256
         shell: powershell
         run: |
-          $files = @('dist/AstronyxMiniForgeStudio.exe', 'dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.0.exe')
+          $files = @('dist/AstronyxMiniForgeStudio.exe', 'dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.1.exe', 'dist/AstronyxMiniForgeStudio-Portable-v2.2.1-Win10-Win11-x64.zip')
           foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
@@ -50,6 +56,12 @@ jobs:
             dist/validation-installer.json
             dist/SHA256SUMS.txt
           if-no-files-found: error
+      - name: Enviar ZIP portatil Windows 10 e 11
+        uses: actions/upload-artifact@v4
+        with:
+          name: AstronyxMiniForgeStudio-Windows-Portable-ZIP
+          path: dist/AstronyxMiniForgeStudio-Portable-v2.2.1-Win10-Win11-x64.zip
+          if-no-files-found: error
       - name: Enviar executavel portatil
         uses: actions/upload-artifact@v4
         with:
@@ -60,11 +72,25 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Setup
-          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.0.exe
+          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.1.exe
           if-no-files-found: error
 
+  compatibility:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependencias de pre-visualizacao
+        run: python -m pip install pillow numpy
+      - name: Testes de compatibilidade em runtime Windows anterior
+        run: python -m unittest discover -s tests -v
+      - name: Validar inicio sem desktop grafico
+        run: python studio.py --version
+
   release:
-    needs: windows
+    needs: [windows, compatibility]
     if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:
@@ -84,6 +110,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Portable
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: AstronyxMiniForgeStudio-Windows-Portable-ZIP
           path: release
       - uses: actions/download-artifact@v4
         with:
@@ -114,5 +144,6 @@ jobs:
           make_latest: true
           files: |
             release/AstronyxMiniForgeStudio-Setup-v${{ steps.version.outputs.version }}.exe
+            release/AstronyxMiniForgeStudio-Portable-v${{ steps.version.outputs.version }}-Win10-Win11-x64.zip
             release/SHA256SUMS.txt
           fail_on_unmatched_files: true
