@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.4-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.5-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.4.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.5.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -57,8 +57,16 @@ A interface recebeu um dashboard renovado, navegação com destaques e feedback 
 [Notas de interface e testes](docs/V2_2_3_HUD.md).
 
 
-## V2.2.4 — Instalador e atualização interna
+## V2.2.5 — Instalador e atualização interna
 
 O Setup distribui o runtime em uma pasta `_internal` ao lado do executável. Isso evita a extração de bibliotecas Python em `_MEI` em cada abertura do app instalado. O instalador utiliza fechamento controlado de aplicativos pelo Inno Setup antes de substituir arquivos, e o atualizador reconhece instalações pela presença do desinstalador `unins000.exe`. A versão ZIP portátil continua disponível separadamente.
 
 Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página Releases e execute com o programa fechado. O instalador preserva os arquivos de projetos, Blender e TaleSpire. O aplicativo não tem assinatura digital certificada; ainda podem existir avisos do SmartScreen.
+
+
+## V2.2.5 — Diagnostico do TaleWeaverCmd
+
+- Verifica `UnityPlayer.dll` e `TaleWeaverCmd_Data` ao chamar o binario oficial do Windows; recomende verificar arquivos do TaleSpire na Steam se faltarem.
+- Texturas PNG com mais de 2048 px sao reduzidas apenas na copia de `Entrada_TaleWeaverCmd`; arquivos originais preservados.
+- Para saida com codigo 1, exibe as mensagens relevantes de `taleweavercmd.log` em vez de somente `memorysetup`.
+- A causa especifica de um erro codigo 1 so pode ser confirmada ao analisar o log da falha real.
