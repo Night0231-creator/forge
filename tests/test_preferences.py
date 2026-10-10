@@ -15,6 +15,7 @@ class TestPreferences(unittest.TestCase):
             self.assertTrue(data['open_after_conversion'])
             self.assertEqual(data['output_root'], '')
             self.assertTrue(data['auto_update_check'])
+            self.assertTrue(data['auto_import_preset'])
 
     def test_previous_version_settings_migrate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -54,6 +55,13 @@ class TestPreferences(unittest.TestCase):
                              open_after_conversion=False,
                              reference_tsmod=reference)
             self.assertEqual(load_preferences(path)['reference_tsmod'], reference)
+
+    def test_auto_import_preset_can_be_disabled(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'settings.json'
+            save_preferences(path,output_root=temp,blender='',
+                             open_after_conversion=True,auto_import_preset=False)
+            self.assertIs(load_preferences(path)['auto_import_preset'],False)
 
     def test_corrupt_settings_do_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
