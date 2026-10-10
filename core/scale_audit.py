@@ -69,7 +69,7 @@ def audit_scale(stats: ObjStats, target_height: float = 1.75,
     status = 'base_limitada' if limited else 'altura_alvo'
     return ScaleAudit(
         target_height=float(target_height),
-        footprint_limit=float(footprint_limit),
+        footprint_limit=(float(footprint_limit) if footprint_limit is not None else None),
         original_height=stats.height,
         original_width=stats.width,
         original_depth=stats.depth,
