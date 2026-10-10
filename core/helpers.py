@@ -5,6 +5,8 @@ import json
 import re
 from pathlib import Path
 
+from .version import APP_VERSION
+
 SUPPORTED = {".blend", ".glb", ".gltf", ".fbx", ".obj", ".stl", ".zip"}
 
 
@@ -61,7 +63,7 @@ def validate_config(data: dict) -> dict:
 
 
 def create_instructions(destination: Path, name: str, stats: dict) -> None:
-    guide = f"""ASTRONYX MINI FORGE V2.2.2 — {name}
+    guide = f"""ASTRONYX MINI FORGE V{APP_VERSION} — {name}
 ==============================================
 
 RESULTADO OFICIAL DO TALESPIRE
@@ -112,6 +114,6 @@ def write_manifest(destination: Path, cfg: dict, stats: dict):
                   if key not in ("source", "output_root")}
     public_cfg["original_filename"] = Path(cfg["source"]).name
     (destination / "conversao.json").write_text(
-        json.dumps({"app": "Astronyx Mini Forge", "version": "2.2.2", "settings": public_cfg,
+        json.dumps({"app": "Astronyx Mini Forge", "version": APP_VERSION, "settings": public_cfg,
                     "stats": stats, "official_tsmod_created": False}, ensure_ascii=False, indent=2),
         encoding="utf-8")
