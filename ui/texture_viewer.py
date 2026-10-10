@@ -24,6 +24,7 @@ except ImportError:
 class TexturedObjViewer(ObjViewer):
     def __init__(self, parent, **kwargs):
         self.display_mode = 'textured'
+        self.compare_reference = True
         self.pan_x = 0.
         self.pan_y = 0.
         self._mesh = None
@@ -101,7 +102,7 @@ class TexturedObjViewer(ObjViewer):
         width = min(720,max(160,self.winfo_width()))
         height = min(720,max(160,self.winfo_height()))
         args=(self._mesh,self._albedo,self.yaw,self.pitch,self.zoom,width,height,
-              self.pan_x,self.pan_y)
+              self.pan_x,self.pan_y,False,self.compare_reference,1.75)
         self._worker_busy = True
 
         def worker():
@@ -137,7 +138,8 @@ class TexturedObjViewer(ObjViewer):
                                          text=f'{self.stats.vertices:,} vértices · {self.stats.faces:,} faces',
                                          fill='#F4F2FF',font=('Consolas',10))
                     self.create_text(12,max(height-15,1),anchor='sw',
-                                     text='Albedo + UV · arraste para girar · botão direito: mover · roda: zoom',
+                                     text='Albedo + UV · arraste para girar · referência humanoide visual 1×1' if self.compare_reference else
+                                          'Albedo + UV · arraste para girar · botão direito: mover · roda: zoom',
                                      fill='#D6CAE8',font=('Segoe UI',9))
         except queue.Empty:
             pass
@@ -146,6 +148,15 @@ class TexturedObjViewer(ObjViewer):
                 self._poll_job=self.after(100,self._poll)
         except tk.TclError:
             return
+
+    def toggle_reference(self):
+        """Toggle the comparative visual ruler in textured preview only."""
+        self.compare_reference = not self.compare_reference
+        if hasattr(self, 'reference_button'):
+            self.reference_button.configure(
+                text=('Humanoide 1×1: ligado' if self.compare_reference
+                      else 'Humanoide 1×1: desligado'))
+        self.render()
 
     def set_mode(self,mode):
         if mode not in ('geometry','textured','wireframe'):
@@ -186,6 +197,12 @@ class TexturedObjViewer(ObjViewer):
                       bg='#303047',fg='#F4F2FF',activebackground='#7545D5',
                       activeforeground='white',relief='flat',bd=0,padx=9,pady=6,
                       cursor='hand2').pack(side='left',padx=3,pady=7)
+        self.reference_button=tk.Button(
+            row,text='Humanoide 1×1: ligado',command=self.toggle_reference,
+            bg='#4D357C',fg='#FFFFFF',activebackground='#7545D5',
+            activeforeground='white',relief='flat',bd=0,padx=10,pady=6,
+            cursor='hand2')
+        self.reference_button.pack(side='left',padx=(15,3),pady=7)
         camera=tk.Frame(holder,bg='#1B1D2D')
         camera.pack(fill='x',pady=(0,8),before=viewport if viewport is not None else None)
         tk.Label(camera,text='CÂMERA',bg='#1B1D2D',fg='#B995FF',
