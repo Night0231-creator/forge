@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Dependencias de visualizacao 3D nao puderam se
 if ($LASTEXITCODE -ne 0) { throw 'Os testes falharam: a compilacao foi interrompida.' }
 & $exe @argsPrefix -m pip install --upgrade pyinstaller
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller nao pode ser instalado.' }
-& $exe @argsPrefix -m PyInstaller --noconfirm --clean --noupx --onedir --contents-directory '_internal' --windowed --version-file 'installer\windows_version_info.txt' --name AstronyxMiniForgeStudio --icon 'assets\astronyx.ico' --add-data 'core\blender_pipeline.py;core' --add-data 'assets;assets' studio.py
+& $exe @argsPrefix -m PyInstaller --noconfirm --clean --noupx --onedir --contents-directory '_internal' --windowed --version-file 'installer\windows_version_info.txt' --name AstronyxMiniForgeStudio --icon 'assets\astronyx.ico' --add-data 'core\blender_pipeline.py;core' --add-data 'core\obj_vertex_budget.py;core' --add-data 'assets;assets' studio.py
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao compilar executavel.' }
 $bin = Join-Path $root 'dist\AstronyxMiniForgeStudio\AstronyxMiniForgeStudio.exe'
 if (-not (Test-Path (Join-Path $root 'dist\AstronyxMiniForgeStudio\_internal'))) { throw 'Runtime onedir _internal ausente.' }
