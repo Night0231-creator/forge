@@ -16,6 +16,11 @@ class StudioHudSmoke(unittest.TestCase):
             app.withdraw()
             self.assertIsNotNone(app.tab_dashboard)
             self.assertIsNotNone(app.tab_preview)
+            from ui.rounded import RoundedNavButton, RoundedEntry, RoundedSelect
+            self.assertIsInstance(app.nav_buttons['home'], RoundedNavButton)
+            self.assertTrue(app.auto_update_check.get())
+            self.assertIn('studio', app.nav_buttons)
+
             self.assertTrue(app.hud_stats)
             app._navigate('studio', 'tab_preview')
             self.assertEqual(app.tabs.select(), str(app.tab_preview))
