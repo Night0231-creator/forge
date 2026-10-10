@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.9-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.10-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.9.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.10.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -106,3 +106,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Ao gerar um .tsMod, salva um relatório JSON na pasta do projeto quando houver referência selecionada.
 - A comparação também funciona no comando de repetir apenas a exportação .tsMod.
 - Não altera, extrai, substitui ou redistribui o binário de referência. Cabeçalho semelhante NÃO comprova que o modelo 3D funciona no TaleSpire ou satisfaz limite de vértices.
+
+
+## V2.2.10 — Corrigir miniaturas muito pequenas (preset visual Basecoat)
+
+- Remove a antiga redução automática da altura total do personagem para conter asas ou armas na largura de 1,30 unidade.
+- Ao selecionar GLB/FBX/OBJ/BLEND/ZIP do Meshy, aplica o perfil visual Basecoat 1×1: altura 1,75, rotação 0, 100.000 triângulos, textura 2048, qualidade Alta e escala automática.
+- Inclui opção para desativar o preset e botão para reaplicar os ajustes; botão +25% permite calibrar a altura conforme o resultado no TaleSpire.
+- A referência .tsMod Basecoat não informa uma altura confiável no cabeçalho: os valores são aproximados, não uma reprodução exata.
+- Para aplicar a correção, reimporte o **GLB original** do Meshy e faça a conversão completa; arquivos OBJ antigos já reduzidos não recuperam detalhes perdidos.
