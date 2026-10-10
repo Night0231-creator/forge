@@ -1,7 +1,7 @@
 # Extract and smoke test the portable ZIP on Windows.
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$archive = Join-Path $root 'dist\AstronyxMiniForgeStudio-Portable-v2.2.6-Win10-Win11-x64.zip'
+$archive = Join-Path $root 'dist\AstronyxMiniForgeStudio-Portable-v2.2.7-Win10-Win11-x64.zip'
 if (-not (Test-Path $archive)) { throw 'ZIP portatil nao encontrado.' }
 $destination = Join-Path $env:TEMP ('Astronyx-Portable-Smoke-' + [Guid]::NewGuid().ToString('N'))
 try {

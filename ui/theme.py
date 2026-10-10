@@ -7,6 +7,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from .rounded import RoundedButton
+
 BG = '#0C0F1A'
 SIDEBAR = '#101321'
 PANEL = '#191D2E'
@@ -28,25 +30,21 @@ def gallery_columns(width: int) -> int:
 
 
 def hover_button(parent, text, command, primary=False, compact=False):
-    normal = ACCENT if primary else RAISED
-    hover = ACCENT_HOVER if primary else BORDER
-    btn = tk.Button(
-        parent, text=text, command=command, cursor='hand2',
-        bg=normal, fg=TEXT, activebackground=hover, activeforeground=TEXT,
-        disabledforeground=SUBTLE, relief='flat', bd=0, highlightthickness=1,
-        highlightbackground=normal, highlightcolor=ACCENT_HOVER, takefocus=True,
-        font=('Segoe UI', 9 if compact else 10, 'bold'),
-        padx=12 if compact else 16, pady=7 if compact else 10,
-    )
-    btn.bind('<Enter>', lambda _e: btn.configure(bg=hover) if btn['state']=='normal' else None, add='+')
-    btn.bind('<Leave>', lambda _e: btn.configure(bg=normal) if btn['state']=='normal' else None, add='+')
-    btn.bind('<FocusIn>', lambda _e: btn.configure(highlightbackground=ACCENT_HOVER), add='+')
-    btn.bind('<FocusOut>', lambda _e: btn.configure(highlightbackground=normal), add='+')
-    return btn
+    return RoundedButton(
+        parent, text, command,
+        bg=ACCENT if primary else RAISED,
+        hover=ACCENT_HOVER if primary else BORDER,
+        fg=TEXT, parent_bg=parent.cget('bg'), radius=10,
+        font=('Segoe UI',9 if compact else 10,'bold'),
+        padx=12 if compact else 16, pady=7 if compact else 10)
 
 
 def apply_studio_style(root):
     style = ttk.Style(root)
+    style.configure('Sidebar.TCheckbutton', background=SIDEBAR,
+                    foreground=TEXT, font=('Segoe UI',9),padding=3)
+    style.map('Sidebar.TCheckbutton', background=[('active',SIDEBAR)],
+              foreground=[('active',TEXT)])
     style.configure('Astronyx.TEntry', foreground=TEXT, fieldbackground=RAISED,
                     background=RAISED, bordercolor=BORDER, insertcolor=TEXT,
                     lightcolor=BORDER, darkcolor=BORDER,
