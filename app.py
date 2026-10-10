@@ -20,7 +20,8 @@ from tkinter import filedialog, messagebox, ttk
 
 from core.helpers import (SUPPORTED, create_instructions, find_blender,
                           safe_slug, validate_config, write_manifest)
-from core.tsmod import guess_talespire_content_folder, inspect_tsmod, install_tsmod
+from core.tsmod import (guess_talespire_content_folder, inspect_tsmod, install_tsmod,
+                        compare_tsmod_reference, format_tsmod_reference_report)
 from core.discovery import tool_status
 from core.archive import extract_meshy_zip
 from core.preview import ObjViewer
@@ -91,6 +92,8 @@ class Forge(tk.Tk):
         self.resolution = tk.StringVar(value='2048')
         self.plugin = tk.BooleanVar(value=True)
         self.tsmod_file = tk.StringVar(value='')
+        self.tsmod_reference = tk.StringVar(value=stored.get('reference_tsmod', ''))
+        self.tsmod_reference_report = tk.StringVar(value='Escolha um .tsMod Basecoat pronto para comparar com o exportado.')
         self.tsmod_folder = tk.StringVar(value=str(stored.get('tsmod_folder') or guess_talespire_content_folder() or ''))
         self.tsmod_details = tk.StringVar(value='Selecione um arquivo .tsMod para verificar sua origem.')
         self.progress = tk.IntVar(value=0)
@@ -494,6 +497,14 @@ class Forge(tk.Tk):
         tk.Label(body, textvariable=self.tsmod_details, bg='#0F1220', fg=FG,
                  justify='left', anchor='nw', wraplength=700,
                  font=('Consolas', 10), padx=14, pady=14).pack(fill='x', pady=(0, 17))
+        self._label(body, 'COMPARAR COM UM .TSMOD PRONTO (REFERÊNCIA)', fg=ACCENT).pack(anchor='w', pady=(3, 6))
+        self._field(body, 'ARQUIVO DE REFERÊNCIA BASECOAT', self.tsmod_reference,
+                    self._choose_tsmod_reference)
+        self._button(body, 'Comparar com o .tsMod selecionado',
+                     self._compare_tsmod_reference, padx=11, pady=8).pack(anchor='w', pady=(2, 10))
+        tk.Label(body, textvariable=self.tsmod_reference_report, bg='#0F1220', fg=FG,
+                 justify='left', anchor='nw', wraplength=725,
+                 font=('Segoe UI', 9), padx=12, pady=9).pack(fill='x', pady=(0, 12))
         self._field(body, 'PASTA LOCALCONTENTPACKS DO TALESPIRE',
                     self.tsmod_folder, self._choose_tsmod_folder)
         self._label(body, 'Dica: no TaleSpire, abra Settings → Open Settings Directory, depois LocalContentPacks. '
@@ -706,6 +717,36 @@ class Forge(tk.Tk):
             f'Informação embutida: {result["description"] or "nenhuma identificada"}\n\n'
             f'{result["warning"]}')
 
+    def _choose_tsmod_reference(self):
+        path = filedialog.askopenfilename(
+            title='Selecione o .tsMod pronto para servir como referência',
+            filetypes=[('Miniaturas TaleSpire', '*.tsMod'), ('Todos', '*.*')])
+        if not path:
+            return
+        try:
+            info = inspect_tsmod(path)
+            if not info['recognized_header']:
+                raise ValueError('Esse arquivo não possui um cabeçalho .tsMod reconhecido.')
+        except (ValueError, OSError) as error:
+            messagebox.showerror('Referência inválida', str(error))
+            return
+        self.tsmod_reference.set(path)
+        self._save_settings()
+        self.tsmod_reference_report.set(
+            f"Referência registrada: {info['filename']}  •  "
+            f"{info['producer']}  •  versão {info['format_version']}.\n"
+            "Agora selecione o .tsMod gerado acima e clique em Comparar. "
+            "O Mini Forge não altera nem descompila a referência.")
+
+    def _compare_tsmod_reference(self):
+        try:
+            report = compare_tsmod_reference(
+                self.tsmod_reference.get().strip().strip('"'),
+                self.tsmod_file.get().strip().strip('"'))
+            self.tsmod_reference_report.set(format_tsmod_reference_report(report))
+        except (ValueError, OSError) as error:
+            self.tsmod_reference_report.set('ERRO: ' + str(error))
+
     def _choose_tsmod_folder(self):
         folder = filedialog.askdirectory(title='Escolha a pasta LocalContentPacks do TaleSpire')
         if folder:
@@ -822,7 +863,8 @@ class Forge(tk.Tk):
                              auto_scale=self.auto_scale.get(), target_height=self.target_height.get(),
                              install_after_conversion=self.install_after.get(),
                              tsmod_folder=self.tsmod_folder.get(),
-                             auto_update_check=self.auto_update_check.get())
+                             auto_update_check=self.auto_update_check.get(),
+                             reference_tsmod=self.tsmod_reference.get())
         except OSError:
             pass
 
@@ -881,7 +923,8 @@ class Forge(tk.Tk):
         self._log(f'Arquivo: {Path(cfg["source"]).name}')
         self._log(f'Pasta: {output}')
         cmd_setup = {'enabled': self.cmd_enabled.get(), 'exe': self.cmd_executable.get().strip().strip('"'), 'scale_factor': scale_factor, 'auto_height': auto_height,
-                    'install_after': self.install_after.get(), 'content_folder': self.tsmod_folder.get().strip()}
+                    'install_after': self.install_after.get(), 'content_folder': self.tsmod_folder.get().strip(),
+                     'reference_tsmod': self.tsmod_reference.get().strip()}
         self.worker = threading.Thread(target=self._convert_thread, args=(exe, cfg, cmd_setup), daemon=True)
         self.worker.start()
 
@@ -944,6 +987,19 @@ class Forge(tk.Tk):
                         on_line=lambda line: self.log_events.put(('log', '[CMD] ' + line)),
                         on_process=lambda proc: setattr(self, 'process', proc))
                     self.log_events.put(('log', 'Arquivo final: ' + str(tsmod_path)))
+                    ref_path = cmd_setup.get('reference_tsmod')
+                    if ref_path:
+                        try:
+                            comparison = compare_tsmod_reference(ref_path, tsmod_path)
+                            comparison_path = dest / 'comparacao_tsmod_referencia.json'
+                            comparison_path.write_text(json.dumps(
+                                comparison, ensure_ascii=False, indent=2),
+                                encoding='utf-8')
+                            self.log_events.put(('log', '[REFERÊNCIA] ' +
+                                format_tsmod_reference_report(comparison).splitlines()[0]))
+                        except (ValueError, OSError) as comparison_error:
+                            self.log_events.put(('log', '[REFERÊNCIA] Não foi possível comparar: ' +
+                                                 str(comparison_error)))
                     if cmd_setup['install_after']:
                         try:
                             installed=install_tsmod(tsmod_path,cmd_setup['content_folder'],replace=True)
