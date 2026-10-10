@@ -23,6 +23,8 @@ from ui import hud22
 from ui import theme as polish
 from ui.texture_viewer import TexturedObjViewer
 from core.updater import find_update, download_installer, run_installer, UpdateError, is_portable
+from core.update_policy import AUTO_UPDATE_INTERVAL_MS, STARTUP_DELAY_MS, should_show_update
+from ui.rounded import RoundedNavButton
 
 
 # Shared visual palette. Conversion modules and data paths remain unchanged.
@@ -52,11 +54,36 @@ class UpdateInterface:
         self._checking_updates = False
         self._downloading_update = False
         self._update_window = None
+        self._auto_update_job = None
+        self._last_notified_version = None
         self.after(120, self._poll_updates)
-        self.after(1800, lambda: self._check_updates(False))
+        if self.auto_update_check.get():
+            self.after(STARTUP_DELAY_MS, lambda: self._check_updates(False))
+        self._schedule_update_checks()
+
+    def _schedule_update_checks(self):
+        """Poll only while the Studio is open and the user has opted in."""
+        if self._auto_update_job is not None:
+            self.after_cancel(self._auto_update_job)
+            self._auto_update_job = None
+        if self.auto_update_check.get():
+            self._auto_update_job = self.after(AUTO_UPDATE_INTERVAL_MS,
+                                               self._automatic_update_tick)
+
+    def _automatic_update_tick(self):
+        self._auto_update_job = None
+        if self.auto_update_check.get():
+            self._check_updates(False)
+        self._schedule_update_checks()
+
+    def _on_auto_update_toggle(self):
+        self._save_settings()
+        self._schedule_update_checks()
+        if self.auto_update_check.get():
+            self._check_updates(False)
 
     def _check_updates(self, manual=True):
-        if self._checking_updates or self._downloading_update:
+        if (not manual and not self.auto_update_check.get()) or self._checking_updates or self._downloading_update:
             return
         self._checking_updates = True
         def work():
@@ -72,9 +99,12 @@ class UpdateInterface:
                 event = self.update_events.get_nowait()
                 if event[0] == 'check':
                     self._checking_updates = False
-                    if event[1]:
+                    if event[1] and should_show_update(
+                            event[1].version, self._last_notified_version,
+                            manual=event[2]):
+                        self._last_notified_version = event[1].version
                         self._show_update(event[1])
-                    elif event[2]:
+                    elif event[1] is None and event[2]:
                         messagebox.showinfo('Atualizações', 'Você já está na versão mais recente.')
                 elif event[0] == 'error':
                     self._checking_updates = False
@@ -172,7 +202,7 @@ class Studio(UpdateInterface, legacy.Forge):
         self._active_nav_key = 'home'
         super().__init__()
         self._begin_updates()
-        self.title('Astronyx Mini Forge Studio V2.2.6 • Meshy → TaleSpire')
+        self.title(f'Astronyx Mini Forge Studio V{APP_VERSION} • Meshy → TaleSpire')
         if os.name == 'nt':
             try:
                 self.iconbitmap(str(legacy.BASE / 'assets' / 'astronyx.ico'))
@@ -198,7 +228,7 @@ class Studio(UpdateInterface, legacy.Forge):
         brand.pack(fill='x', padx=20, pady=(21, 18))
         tk.Label(brand, text='✦  ASTRONYX', fg=polish.ACCENT_HOVER, bg=SIDEBAR,
                  font=('Segoe UI', 17, 'bold')).pack(anchor='w')
-        tk.Label(brand, text='MINI FORGE  /  V2.2.6', fg=polish.SUBTLE, bg=SIDEBAR,
+        tk.Label(brand, text=f'MINI FORGE  /  V{APP_VERSION}', fg=polish.SUBTLE, bg=SIDEBAR,
                  font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(6, 0))
         tk.Frame(sidebar, height=1, bg=polish.BORDER).pack(fill='x', padx=18, pady=(0, 12))
 
@@ -214,24 +244,28 @@ class Studio(UpdateInterface, legacy.Forge):
             row.pack(fill='x',padx=11,pady=2)
             indicator=tk.Frame(row,bg=SIDEBAR,width=3)
             indicator.pack(side='left',fill='y')
-            button=tk.Button(row,text=f'{icon}    {label}',anchor='w',
+            button=RoundedNavButton(
+                row,text=f'{icon}   {label}',
                 command=lambda k=key,t=target:self._navigate(k,t),
-                bg=SIDEBAR,fg=polish.MUTED,activebackground=polish.ACCENT_SOFT,
-                activeforeground=polish.TEXT,relief='flat',bd=0,padx=12,pady=10,
-                font=('Segoe UI',10),cursor='hand2',highlightthickness=0)
+                width=188)
             button.pack(side='left',fill='x',expand=True)
-            button.bind('<Enter>',lambda e,k=key:self._nav_hover(k,True),add='+')
-            button.bind('<Leave>',lambda e,k=key:self._nav_hover(k,False),add='+')
             self.nav_buttons[key]=button
             self.nav_indicators[key]=indicator
 
         footer=tk.Frame(sidebar,bg=SIDEBAR)
         footer.pack(side='bottom',fill='x',padx=17,pady=(0,21))
         tk.Frame(footer,bg=polish.BORDER,height=1).pack(fill='x',pady=(0,14))
+        ttk.Checkbutton(footer,text='Avisar sobre novas versões',
+                        variable=self.auto_update_check,style='Sidebar.TCheckbutton',
+                        command=self._on_auto_update_toggle).pack(fill='x',pady=(0,5))
+        tk.Label(footer,text='Ao abrir e a cada 5 min enquanto aberto',
+                 bg=SIDEBAR,fg=polish.SUBTLE,font=('Segoe UI',8),
+                 justify='center',anchor='center',wraplength=194).pack(fill='x',pady=(0,13))
         tk.Label(footer,text='●  CONVERSÃO LOCAL',bg=SIDEBAR,fg=GREEN,
-                 font=('Segoe UI',9,'bold')).pack(anchor='w')
+                 font=('Segoe UI',9,'bold'),justify='center',anchor='center').pack(fill='x')
         tk.Label(footer,text='Projetos salvos no seu computador',bg=SIDEBAR,
-                 fg=polish.SUBTLE,font=('Segoe UI',9)).pack(anchor='w',pady=(4,0))
+                 fg=polish.SUBTLE,font=('Segoe UI',9),
+                 justify='center',anchor='center').pack(fill='x',pady=(4,0))
 
         main = tk.Frame(body, bg=legacy.BG)
         main.pack(side='left', fill='both', expand=True)
@@ -318,10 +352,7 @@ class Studio(UpdateInterface, legacy.Forge):
                 fg=GREEN if blender_ok and cmd_ok else '#EAC07B')
 
     def _nav_hover(self,key,enter):
-        if key==self._active_nav_key:
-            return
-        self.nav_buttons[key].configure(bg=polish.RAISED if enter else SIDEBAR,
-                                        fg=polish.TEXT if enter else polish.MUTED)
+        self.nav_buttons[key].set_hover(enter)
 
     def _tab_switched(self, _event=None):
         selected = self.tabs.select()
@@ -342,9 +373,7 @@ class Studio(UpdateInterface, legacy.Forge):
                 break
         for key, _, _, target in self.NAV:
             active = str(getattr(self, target)) == selected
-            self.nav_buttons[key].configure(bg=polish.ACCENT_SOFT if active else SIDEBAR,
-                                            fg=polish.TEXT if active else polish.MUTED,
-                                            font=('Segoe UI',10,'bold' if active else 'normal'))
+            self.nav_buttons[key].set_selected(active)
             self.nav_indicators[key].configure(bg=polish.ACCENT if active else SIDEBAR)
             if active:
                 self._active_nav_key=key
@@ -498,6 +527,17 @@ class Studio(UpdateInterface, legacy.Forge):
             self.library_scroll.yview_scroll(-int(event.delta / 120), 'units')
         else:
             super()._scroll_wheel(event)
+
+    def destroy(self):
+        """Cancel pending update polling before Tcl widgets are destroyed."""
+        job = getattr(self, '_auto_update_job', None)
+        if job is not None:
+            try:
+                self.after_cancel(job)
+            except tk.TclError:
+                pass
+            self._auto_update_job = None
+        super().destroy()
 
     def _read_log(self):
         previously_busy = self.busy
