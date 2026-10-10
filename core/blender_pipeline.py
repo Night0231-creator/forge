@@ -177,7 +177,16 @@ def normalize_model(obj, cfg):
         vert.co.y = (vert.co.y - cy) * scale
         vert.co.z = (vert.co.z - lowz) * scale
     obj.data.update()
-    return {'height_scale': scale, 'footprint_scale': enforce_footprint(obj)}
+    # Old hard-coded 1.30-width limit shrank the *entire* character when a
+    # Meshy model contained wide armor, swords, capes or wings. This created
+    # the tiny mini even after asking for a 1.75-unit humanoid.
+    # Keep the requested height and let the TaleSpire game assign base size.
+    span = metrics(obj)
+    footprint = max(span[1]-span[0], span[3]-span[2])
+    if footprint > cfg['height'] * 1.25:
+        print('AMF_WARNING|Modelo possui acessórios largos; mantendo altura '
+              'do personagem sem reduzir a malha por largura.', flush=True)
+    return {'height_scale': scale, 'footprint_scale': 1.0}
 
 
 def optimize(obj, desired_faces):

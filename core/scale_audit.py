@@ -12,7 +12,7 @@ from .geometry import ObjStats, suggest_factor, suggest_safe_factor
 @dataclass(frozen=True)
 class ScaleAudit:
     target_height: float
-    footprint_limit: float
+    footprint_limit: float | None
     original_height: float
     original_width: float
     original_depth: float
@@ -37,9 +37,10 @@ class ScaleAudit:
                 'Aumentar apenas o multiplicador pode ultrapassar a base visual.'
             )
         return (
-            'A altura-alvo cabe dentro do limite de largura/profundidade escolhido. '
-            'Compare com uma miniatura humanoide 1×1 dentro do TaleSpire: esta '
-            'verificação mede a malha, não o collider nem a escala de gameplay.'
+            'A altura-alvo foi preservada, mesmo se o modelo tiver armas, asas '
+            'ou acessórios largos. A largura não reduz mais o personagem. '
+            'Compare com uma miniatura 1×1 dentro do TaleSpire: estas medidas '
+            'não alteram o collider nem o tamanho de gameplay.'
         )
 
     def summary(self) -> str:
@@ -59,7 +60,7 @@ class ScaleAudit:
 
 
 def audit_scale(stats: ObjStats, target_height: float = 1.75,
-                footprint_limit: float = 1.30) -> ScaleAudit:
+                footprint_limit: float | None = None) -> ScaleAudit:
     """Same auto-scale math used by conversion, with a human-readable diagnosis."""
     requested = suggest_factor(stats.height, target_height)
     applied = suggest_safe_factor(stats, target_height, footprint_limit)
@@ -68,7 +69,7 @@ def audit_scale(stats: ObjStats, target_height: float = 1.75,
     status = 'base_limitada' if limited else 'altura_alvo'
     return ScaleAudit(
         target_height=float(target_height),
-        footprint_limit=float(footprint_limit),
+        footprint_limit=(float(footprint_limit) if footprint_limit is not None else None),
         original_height=stats.height,
         original_width=stats.width,
         original_depth=stats.depth,
