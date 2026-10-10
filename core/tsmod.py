@@ -47,6 +47,70 @@ def inspect_tsmod(filepath: str | Path) -> dict:
     }
 
 
+
+def compare_tsmod_reference(reference: str | Path, candidate: str | Path) -> dict:
+    """Compare a known-good .tsMod and a generated .tsMod safely.
+
+    This comparison does NOT unzip/decompile files, extract meshes, copy
+    protected bytes, or claim a functioning asset solely from matching headers.
+    Producer, auxiliary field and size are descriptive, not compatibility gates.
+    """
+    original = inspect_tsmod(reference)
+    generated = inspect_tsmod(candidate)
+    if not original['recognized_header']:
+        raise ValueError('A referência precisa ter um cabeçalho .tsMod reconhecido.')
+    if not generated['recognized_header']:
+        status = 'cabecalho_diferente'
+    elif original['format_version'] != generated['format_version']:
+        status = 'versao_diferente'
+    else:
+        status = 'cabecalho_compatível'
+    ref = Path(reference).resolve()
+    new = Path(candidate).resolve()
+    same = ref == new or (original['size_bytes'] == generated['size_bytes']
+                          and _same_file(ref, new))
+    return {
+        'status': 'arquivo_identico' if same else status,
+        'same_file': same,
+        'same_magic': original['header_magic'] == generated['header_magic'],
+        'same_format_version': (
+            original['recognized_header'] and generated['recognized_header']
+            and original['format_version'] == generated['format_version']),
+        'reference': {key: original[key] for key in (
+            'filename', 'size_bytes', 'header_magic', 'format_version',
+            'header_aux', 'description', 'producer')},
+        'candidate': {key: generated[key] for key in (
+            'filename', 'size_bytes', 'header_magic', 'format_version',
+            'header_aux', 'description', 'producer')},
+        'warning': (
+            'A comparação verifica cabeçalho e metadados; NÃO confirma a malha, '
+            'texturas, escala, limite de vértices ou funcionamento no TaleSpire. '
+            'Não transforma nem usa dados binários da referência como template.'
+        ),
+    }
+
+
+def format_tsmod_reference_report(report: dict) -> str:
+    """Small, readable UI summary for Basecoat or TaleWeaverCmd comparisons."""
+    base, result = report['reference'], report['candidate']
+    if report['same_file']:
+        headline = 'Você selecionou o mesmo arquivo (ou uma cópia idêntica).'
+    elif report['same_magic'] and report['same_format_version']:
+        headline = 'Cabeçalho e versão interna correspondem à referência.'
+    elif not report['same_magic']:
+        headline = 'O cabeçalho é diferente da referência.'
+    else:
+        headline = 'Versões internas diferentes; requer revisão manual.'
+    return (
+        headline + '\n'
+        + f"Referência: {base['filename']}  •  {base['producer']}  "
+          f"•  versão {base['format_version']}  •  {base['size_bytes']:,} bytes\n"
+        + f"Gerado: {result['filename']}  •  {result['producer']}  "
+          f"•  versão {result['format_version']}  •  {result['size_bytes']:,} bytes\n\n"
+        + report['warning']
+    )
+
+
 def guess_talespire_content_folder() -> Path | None:
     # TaleSpire docs recommend Settings -> Open Settings Directory for accuracy.
     home = Path.home()

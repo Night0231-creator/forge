@@ -1,2 +1,2 @@
-APP_VERSION = '2.2.8'
+APP_VERSION = '2.2.9'
 REPO = 'Night0231-creator/forge'

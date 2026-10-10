@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.8-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.9-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.8.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.9.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -97,3 +97,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - FBX e OBJ usam a mesma malha pós-otimização; o GLB original não é alterado.
 - Mensagem prioriza erro real de vértices sobre alertas de shader. A simplificação pode reduzir detalhes geométricos finos.
 - [Notas técnicas](docs/V2_2_8_VERTEX_OVERFLOW_FIX.md).
+
+
+## V2.2.9 — Comparação com .tsMod pronto do Basecoat
+
+- Selecione um .tsMod pronto na aba Instalar no TaleSpire como **referência**.
+- Compare o cabeçalho, a versão interna e os metadados com um .tsMod produzido no Mini Forge.
+- Ao gerar um .tsMod, salva um relatório JSON na pasta do projeto quando houver referência selecionada.
+- A comparação também funciona no comando de repetir apenas a exportação .tsMod.
+- Não altera, extrai, substitui ou redistribui o binário de referência. Cabeçalho semelhante NÃO comprova que o modelo 3D funciona no TaleSpire ou satisfaz limite de vértices.

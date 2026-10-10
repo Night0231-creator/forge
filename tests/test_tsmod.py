@@ -3,7 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core.tsmod import KNOWN_MAGIC, inspect_tsmod, install_tsmod
+from core.tsmod import (KNOWN_MAGIC, inspect_tsmod, install_tsmod,
+                        compare_tsmod_reference, format_tsmod_reference_report)
 from core.helpers import validate_config
 
 
@@ -46,6 +47,54 @@ class TestTsmod(unittest.TestCase):
             install_tsmod(src, output, replace=True)
             self.assertEqual(dest.read_bytes(), src.read_bytes())
             self.assertTrue(list(output.glob('*.bak')))
+
+    def test_known_basecoat_reference_compared_with_taleweaver_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            base=self.make_mod(root, 'eclipse_warlord_reference.tsMod',
+                'eclipse_warlordexported using Basecoat.')
+            newer=self.make_mod(root, 'new_eclipse.tsMod',
+                'Created by another tool')
+            info=inspect_tsmod(base)
+            self.assertEqual(info['header_magic'], 'ced1ced1')
+            self.assertEqual(info['format_version'], 1)
+            self.assertEqual(info['header_aux'], 5)
+            self.assertEqual(info['producer'], 'Basecoat')
+            report=compare_tsmod_reference(base,newer)
+            self.assertEqual(report['status'],'cabecalho_compatível')
+            self.assertTrue(report['same_magic'])
+            self.assertTrue(report['same_format_version'])
+            self.assertEqual(report['reference']['producer'], 'Basecoat')
+            self.assertNotEqual(report['candidate']['producer'], 'Basecoat')
+            self.assertFalse(report['same_file'])
+            self.assertIn('NÃO confirma',format_tsmod_reference_report(report))
+
+    def test_copy_of_reference_is_identical_without_copying_payload(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            base=self.make_mod(root)
+            copy=root/'copy.tsMod'
+            copy.write_bytes(base.read_bytes())
+            report=compare_tsmod_reference(base,copy)
+            self.assertEqual(report['status'],'arquivo_identico')
+            self.assertIn('cópia idêntica',format_tsmod_reference_report(report))
+
+    def test_invalid_reference_rejected_and_different_version_flagged(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            base=self.make_mod(root)
+            incompatible=self.make_mod(root,'other.tsMod')
+            data=bytearray(incompatible.read_bytes())
+            data[4:8]=(2).to_bytes(4,'little')
+            incompatible.write_bytes(data)
+            self.assertEqual(compare_tsmod_reference(base,incompatible)['status'],
+                             'versao_diferente')
+            bad=root/'unknown.tsMod'
+            bad.write_bytes(b'bad!'*20)
+            with self.assertRaisesRegex(ValueError,'referência'):
+                compare_tsmod_reference(bad,base)
+            self.assertEqual(compare_tsmod_reference(base,bad)['status'],
+                             'cabecalho_diferente')
 
     def test_reject_wrong_folder(self):
         with tempfile.TemporaryDirectory() as temp:
