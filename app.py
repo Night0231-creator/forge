@@ -27,6 +27,7 @@ from core.archive import extract_meshy_zip
 from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
+from core.scale_diagnostic import save_scale_diagnostics, build_scale_report
 from core.quality_notes import quality_notes
 from core.version import APP_VERSION
 from core.scale_profile import is_meshy_model, preset_values, BASECOAT_VISUAL_PRESET_NAME, suggested_calibration_height
@@ -593,6 +594,8 @@ class Forge(tk.Tk):
                     fg=MUTED, font=('Segoe UI', 10), wraplength=840).pack(anchor='w', pady=(0, 19))
         self._button(body, 'Diagnosticar escala 1×1 de uma miniatura preparada',
                      self._diagnose_scale, padx=11, pady=8).pack(anchor='w', pady=(0, 10))
+        self._button(body, 'Gerar ZIP de diagnóstico da escala',
+                     self._export_scale_diagnostics, padx=11, pady=8).pack(anchor='w', pady=(0, 10))
         self._button(body, 'Gerar .tsMod de uma pasta já preparada', self._rerun_cmd,
                      accent=True).pack(anchor='w', pady=(4, 12))
         self._label(body, 'Ao repetir a geração, não é necessário passar pelo Blender outra vez. '
@@ -671,6 +674,31 @@ class Forge(tk.Tk):
         title = ('Escala 1×1: base limita a altura' if report.footprint_limited
                  else 'Escala 1×1: dimensões dentro da referência')
         messagebox.showwarning(title, report.summary()) if report.footprint_limited else messagebox.showinfo(title, report.summary())
+
+    def _export_scale_diagnostics(self):
+        """Build a local evidence ZIP; NEVER upload the customer's model."""
+        root = Path(self.target.get()).expanduser()
+        folder = filedialog.askdirectory(
+            title='Selecione a pasta da miniatura gerada pelo Mini Forge',
+            initialdir=str(root) if root.is_dir() else str(Path.home()))
+        if not folder:
+            return
+        try:
+            report, archive = save_scale_diagnostics(folder)
+            data = build_scale_report(folder)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Diagnóstico não gerado', str(exc))
+            return
+        original = data.get('obj_source') or {}
+        prepared = data.get('obj_sent_to_taleweavercmd') or {}
+        notice = ('Diagnóstico salvo localmente.\n\n'
+                  f"Altura OBJ do Blender: {original.get('height','ausente')}\n"
+                  f"Altura enviada ao TaleWeaverCmd: {prepared.get('height','ausente')}\n"
+                  f"Escala registrada: {data.get('recorded_scale_factor','ausente')}\n\n"
+                  f"ZIP: {archive}\n\n"
+                  'O ZIP inclui geometria e o .tsMod gerado quando presentes. '
+                  'Revise antes de compartilhar; nenhum arquivo foi enviado.')
+        messagebox.showinfo('Diagnóstico de escala pronto', notice)
 
     def _rerun_cmd(self):
         if self.busy:
