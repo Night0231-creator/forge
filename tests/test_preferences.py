@@ -14,6 +14,7 @@ class TestPreferences(unittest.TestCase):
             data = load_preferences(Path(tmp) / 'settings.json')
             self.assertTrue(data['open_after_conversion'])
             self.assertEqual(data['output_root'], '')
+            self.assertTrue(data['auto_update_check'])
 
     def test_previous_version_settings_migrate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -22,6 +23,7 @@ class TestPreferences(unittest.TestCase):
                                         'output_root': r'D:\Meus Personagens'}), encoding='utf-8')
             data = load_preferences(path)
             self.assertTrue(data['open_after_conversion'])
+            self.assertTrue(data['auto_update_check'])
             self.assertEqual(data['output_root'], r'D:\Meus Personagens')
 
     def test_remember_checked_and_unchecked_settings(self):
@@ -33,6 +35,15 @@ class TestPreferences(unittest.TestCase):
                 data = load_preferences(path)
                 self.assertEqual(data['open_after_conversion'], option)
                 self.assertEqual(data['output_root'], r'D:\Minis\Astronyx')
+
+    def test_automatic_update_setting_is_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'settings.json'
+            for enabled in (False, True):
+                save_preferences(path, output_root=tmp, blender='',
+                                 open_after_conversion=True,
+                                 auto_update_check=enabled)
+                self.assertEqual(load_preferences(path)['auto_update_check'], enabled)
 
     def test_corrupt_settings_do_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
