@@ -21,6 +21,7 @@ def load_preferences(path: Path) -> dict:
         'blender': settings.get('blender', ''),
         # New setting enabled by default; remember explicit false on next run.
         'open_after_conversion': settings.get('open_after_conversion', True) is True,
+        'auto_update_check': settings.get('auto_update_check', True) is True,
         'cmd_enabled': settings.get('cmd_enabled', False) is True,
         'cmd_executable': settings.get('cmd_executable', ''),
         'cmd_arguments': settings.get('cmd_arguments', ''),
@@ -43,7 +44,8 @@ def save_preferences(path: Path, *, output_root: str, blender: str,
                      cmd_executable: str = "", cmd_arguments: str = "",
                      cmd_json_template: str = "", scale_factor: str = "1",
                      auto_scale: bool = True, target_height: str = "1.75",
-                     install_after_conversion: bool = False, tsmod_folder: str = "") -> None:
+                     install_after_conversion: bool = False, tsmod_folder: str = "",
+                     auto_update_check: bool = True) -> None:
     """Save app preferences atomically without touching projects or models."""
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
@@ -51,6 +53,7 @@ def save_preferences(path: Path, *, output_root: str, blender: str,
         'output_root': output_root,
         'blender': blender,
         'open_after_conversion': bool(open_after_conversion),
+        'auto_update_check': bool(auto_update_check),
         'cmd_enabled': bool(cmd_enabled),
         'cmd_executable': cmd_executable,
         'cmd_arguments': cmd_arguments,
