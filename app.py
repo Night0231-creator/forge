@@ -29,6 +29,7 @@ from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
 from core.quality_notes import quality_notes
 from core.version import APP_VERSION
+from core.scale_profile import is_meshy_model, preset_values, BASECOAT_VISUAL_PRESET_NAME, suggested_calibration_height
 from ui.rounded import RoundedButton, RoundedEntry, RoundedSelect
 from core.preferences import load_preferences, open_output_folder, save_preferences
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
@@ -75,6 +76,7 @@ class Forge(tk.Tk):
         self.name = tk.StringVar(value='')
         self.auto_open = tk.BooleanVar(value=stored['open_after_conversion'])
         self.auto_update_check = tk.BooleanVar(value=stored['auto_update_check'])
+        self.auto_import_preset = tk.BooleanVar(value=stored.get('auto_import_preset', True))
         self.install_after = tk.BooleanVar(value=stored['install_after_conversion'])
         self.output_preview = tk.StringVar(value='')
         self.name.trace_add('write', lambda *_: self._update_output_preview())
@@ -103,6 +105,7 @@ class Forge(tk.Tk):
         self.cmd_executable.trace_add('write', lambda *_: self._refresh_quick_status())
         self._style()
         self._draw()
+        self.source.trace_add('write', self._on_meshy_source_changed)
         self._refresh_quick_status()
         self.protocol('WM_DELETE_WINDOW', self._close)
         self._read_job = self.after(100, self._read_log)
@@ -235,6 +238,9 @@ class Forge(tk.Tk):
         card, body = self._card(shell, '01  ·  Seu personagem do Meshy')
         card.pack(fill='x', pady=(0, 10))
         self._field(body, 'ARQUIVO .BLEND / .GLB / .FBX / .OBJ / .ZIP', self.source, self._pick_source)
+        self._label(body, 'Ao selecionar um modelo, o perfil visual Basecoat 1×1 é aplicado automaticamente. '
+                    'Não copia escala de arquivos .tsMod: a referência é uma aproximação.',
+                    fg=MUTED, wraplength=830).pack(fill='x',pady=(0,9))
         self._field(body, 'NOME DA MINIATURA', self.name)
         self._field(body, 'PASTA ONDE SALVAR', self.target, self._pick_target)
 
@@ -304,6 +310,13 @@ class Forge(tk.Tk):
         first, body = self._card(self.converter_inner, '01  ·  Modelo e destinos')
         first.pack(fill='x', pady=(13, 11), padx=(3, 3))
         self._field(body, 'PERSONAGEM DO MESHY  ·  .BLEND / .GLB / .GLTF / .FBX / .OBJ / .STL / .ZIP', self.source, self._pick_source)
+        ttk.Checkbutton(body, text='Aplicar automaticamente o perfil Basecoat 1×1 (visual) ao selecionar modelo',
+                        variable=self.auto_import_preset, command=self._save_settings).pack(anchor='w', pady=(2,5))
+        self._button(body, 'Reaplicar perfil Basecoat 1×1', self._apply_basecoat_visual_preset,
+                     padx=11,pady=7).pack(anchor='w',pady=(0,7))
+        self._label(body, 'Usa altura 1,75, qualidade Alta, texturas 2048 e escala automática. '
+                    'Não reduz mais o personagem inteiro pela largura das asas/armas.',
+                    fg=MUTED,wraplength=870).pack(anchor='w',pady=(0,9))
         test_btn = self._button(body, 'Usar guerreiro de exemplo (GLB)', self._use_example, padx=11, pady=5)
         test_btn.pack(anchor='w', pady=(0, 6))
         self._field(body, 'NOME DA MINIATURA', self.name)
@@ -552,10 +565,12 @@ class Forge(tk.Tk):
         refrow=tk.Frame(body,bg=PANEL)
         refrow.pack(fill='x',pady=(0,12))
         self._label(refrow,'ALTURA ALVO NO TALESPIRE').pack(side='left',padx=(0,12))
-        ref=ttk.Combobox(refrow,textvariable=self.target_height,values=('1.25','1.75','2','2.5','3.5'),width=9)
+        ref=ttk.Combobox(refrow,textvariable=self.target_height,values=('1.25','1.75','2','2.5','3','3.5','4'),width=9)
         ref.pack(side='left')
         ref.bind('<<ComboboxSelected>>',lambda _e:self._save_settings())
-        self._label(refrow,'1,75 = ponto inicial humanoide; confira o resultado dentro do TaleSpire',fg=MUTED).pack(side='left',padx=12)
+        self._label(refrow,'1,75 = aproximação Basecoat 1×1; ajuste após comparar no TaleSpire',fg=MUTED).pack(side='left',padx=12)
+        self._button(body,'Aumentar altura visual em 25%',self._increase_visual_size,
+                     padx=11,pady=7).pack(anchor='w',pady=(0,9))
         self._label(body, 'MULTIPLICADOR MANUAL (usado se desmarcar escala automática)', fg=ACCENT).pack(anchor='w', pady=(6, 5))
         choices = ttk.Combobox(body, textvariable=self.scale_factor, values=('0.75', '1', '1.25', '1.5', '2', '2.5', '3', '4'), width=12)
         choices.pack(anchor='w', pady=(0, 4))
@@ -804,6 +819,45 @@ class Forge(tk.Tk):
         except (ValueError, OSError) as error:
             messagebox.showerror('Não foi possível instalar', str(error))
 
+    def _apply_basecoat_visual_preset(self):
+        """On Meshy import, restore consistent *visual* defaults, not tsMod bytes."""
+        values = preset_values()
+        for key in ('height', 'rotation', 'tris', 'resolution', 'quality',
+                    'target_height', 'scale_factor'):
+            getattr(self, key).set(str(values[key]))
+        self.auto_scale.set(True)
+        self.cmd_enabled.set(True)
+        self.plugin.set(False)
+        self.message.set(
+            'Perfil Basecoat 1×1 visual aplicado: altura 1,75 e sem redução por largura. '
+            'Confira o tamanho real no TaleSpire.')
+        self._save_settings()
+
+    def _on_meshy_source_changed(self, *_args):
+        """Apply only for real existing files; paste/edit remains possible."""
+        source = self.source.get().strip().strip('"')
+        if self.auto_import_preset.get() and is_meshy_model(source):
+            # Editing a path does not produce repeated changes while it isn't a file.
+            if source == getattr(self, '_last_auto_preset_source', None):
+                return
+            self._last_auto_preset_source = source
+            self._apply_basecoat_visual_preset()
+
+    def _increase_visual_size(self):
+        """Explicit calibration action when in-game height remains too small."""
+        try:
+            current = float(self.target_height.get().replace(',', '.'))
+            next_height = suggested_calibration_height(current, 1.25)
+        except ValueError as error:
+            messagebox.showwarning('Calibração de tamanho', str(error))
+            return
+        self.target_height.set(str(next_height))
+        self.height.set(str(next_height))
+        self.auto_scale.set(True)
+        self._save_settings()
+        self.message.set(f'Altura visual ajustada para {next_height} unidades. '
+                         'Converta novamente e compare com um humanoide 1×1 no TaleSpire.')
+
     def _use_example(self):
         sample = BASE / 'assets' / 'exemplo_guerreiro.glb'
         if sample.is_file():
@@ -893,7 +947,8 @@ class Forge(tk.Tk):
                              install_after_conversion=self.install_after.get(),
                              tsmod_folder=self.tsmod_folder.get(),
                              auto_update_check=self.auto_update_check.get(),
-                             reference_tsmod=self.tsmod_reference.get())
+                             reference_tsmod=self.tsmod_reference.get(),
+                             auto_import_preset=self.auto_import_preset.get())
         except OSError:
             pass
 
