@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V2.2.6.
+"""Astronyx Mini Forge Studio V2.2.7.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -555,7 +555,7 @@ def run_packaged_selftest(report_file: str) -> int:
     import json
     import sys
     result = {
-        'version': '2.2.6',
+        'version': '2.2.7',
         'frozen': bool(getattr(sys, 'frozen', False)),
         'test': 'resource_and_tcl_smoke',
         'checked': {},
@@ -588,7 +588,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 2.2.6')
+            print('Astronyx Mini Forge Studio 2.2.7')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''
