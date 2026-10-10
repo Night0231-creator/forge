@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.7-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.8-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.7.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.8.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -88,3 +88,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Nenhuma instalação silenciosa: apenas o usuário autoriza o download e a execução do instalador com hash SHA-256 verificado. O modo portátil continua com download manual do ZIP.
 - Menus de navegação, ações e campos com cantos arredondados; valores e rótulos de ajustes de modelagem centralizados.
 - O atualizador não mantém processos em segundo plano quando o aplicativo está fechado e não promete notificação instantânea: até cinco minutos entre verificações, mais latência de rede.
+
+
+## V2.2.8 — Correção do erro de mais de 60.000 vértices
+
+- Otimiza automaticamente a malha do Meshy pela contagem de combinações UV/normais/material do OBJ preparado.
+- Mantém alvo conservador de 48 mil vértices estimados antes do TaleWeaverCmd (teto oficial: 60 mil).
+- FBX e OBJ usam a mesma malha pós-otimização; o GLB original não é alterado.
+- Mensagem prioriza erro real de vértices sobre alertas de shader. A simplificação pode reduzir detalhes geométricos finos.
+- [Notas técnicas](docs/V2_2_8_VERTEX_OVERFLOW_FIX.md).

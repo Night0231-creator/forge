@@ -169,3 +169,32 @@ class TaleWeaverDiagnosticsTests(unittest.TestCase):
             (Path(folder) / 'UnityPlayer.dll').write_bytes(b'test')
             (Path(folder) / 'TaleWeaverCmd_Data').mkdir()
             _verify_tool_runtime(exe)
+
+    def test_old_oversized_obj_is_caught_before_running_unity(self):
+        from core.obj_vertex_budget import MAX_TALEWEAVER_VERTICES
+        with tempfile.TemporaryDirectory() as d:
+            folder = create_source(Path(d))
+            original = folder / 'TaleWeaverCmd_Source' / 'Guerreiro.obj'
+            original.write_text(
+                'v 0 0 0\nv 1 0 0\nv 0 1 0\n'
+                + ''.join(f'vt {i/70000:.6f} 0\n' for i in range(MAX_TALEWEAVER_VERTICES + 3))
+                + ''.join(f'f 1/{i} 2/{i+1} 3/{i+2}\n'
+                          for i in range(1, MAX_TALEWEAVER_VERTICES + 1)),
+                encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'limite de vértices'):
+                prepare_cmd_input(folder, 'Guerreiro')
+
+    def test_unity_shader_warnings_do_not_hide_real_vertex_error(self):
+        from core.taleweavercmd import _read_log_errors
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d) / 'output.log'
+            log.write_text(
+                'ERROR: Shader Sprites/Default shader is not supported\n'
+                'Caught exception: System.Exception: Creature has 82763 '
+                'vertices which exceeds the max allowed count of 60000\n'
+                'ERROR: Shader Sprites/Mask shader is not supported\n',
+                encoding='utf-8')
+            reason = _read_log_errors(log, [])
+            self.assertIn('82,763', reason)
+            self.assertIn('60,000', reason)
+            self.assertIn('GLB original', reason)

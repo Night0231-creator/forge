@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Callable
 from .geometry import inspect_obj, suggest_factor, suggest_safe_factor
 from .scale_audit import audit_scale
+from .obj_vertex_budget import (inspect_obj_vertex_budget,
+                                unity_vertex_exception, vertex_error_message,
+                                MAX_TALEWEAVER_VERTICES)
 
 REQUIRED_FILES = (
     'model.obj', 'albedo.png', 'metallic_ao_emis_smoothness.png',
@@ -100,6 +103,9 @@ def _read_log_errors(path: Path, tail: list[str]) -> str:
                   and 'memorysetup_' not in line.casefold()]
     important = [line for line in meaningful
                  if re.search(r'error|exception|failed|fatal|invalid|could not|not found|missing|crash|abort',line,re.I)]
+    overflow = unity_vertex_exception('\n'.join(meaningful))
+    if overflow:
+        return vertex_error_message(*overflow)
     if important:
         return '\n'.join(important[-8:])
     return '\n'.join(meaningful[-8:]) if meaningful else (
@@ -212,6 +218,9 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
     missing = [p for p in (obj_file, *(source / f for f in IMAGE_MAP.values())) if not p.is_file()]
     if missing:
         raise FileNotFoundError('Arquivos faltando após processamento Blender: ' + ', '.join(p.name for p in missing))
+    vertex_budget = inspect_obj_vertex_budget(obj_file)
+    if vertex_budget.split_vertices > MAX_TALEWEAVER_VERTICES:
+        raise ValueError(vertex_error_message(vertex_budget.split_vertices))
     stage = folder / 'Entrada_TaleWeaverCmd'
     stage.mkdir(parents=True, exist_ok=True)
     resize_obj_vertices(obj_file, stage / 'model.obj', scale_factor)
