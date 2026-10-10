@@ -27,6 +27,7 @@ from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
 from core.quality_notes import quality_notes
+from core.version import APP_VERSION
 from core.preferences import load_preferences, open_output_folder, save_preferences
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
 
@@ -142,7 +143,7 @@ class Forge(tk.Tk):
                            fill=FG, font=('Segoe UI', 24, 'bold'))
         header.create_text(34, 78, anchor='w', text='MESHY AI  →  BLENDER  →  TALEWEAVERCMD  →  TALESPIRE',
                            fill='#BAA8E8', font=('Segoe UI', 10, 'bold'))
-        header.create_text(935, 92, anchor='e', text='VERSÃO 2.2.2  •  WINDOWS',
+        header.create_text(935, 92, anchor='e', text=f'VERSÃO {APP_VERSION}  •  WINDOWS',
                            fill='#C3B5F3', font=('Segoe UI', 9, 'bold'))
         content = tk.Frame(self, bg=BG)
         content.pack(fill='both', expand=True, padx=22, pady=(14, 12))
