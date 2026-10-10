@@ -386,6 +386,8 @@ class Forge(tk.Tk):
             self.convert_canvas.yview_scroll(-int(event.delta / 120), 'units')
         elif self.tabs.select() == str(self.tab_quick):
             self.quick_canvas.yview_scroll(-int(event.delta / 120), 'units')
+        elif self.tabs.select() == str(self.tab_tsmod):
+            self.tsmod_canvas.yview_scroll(-int(event.delta / 120), 'units')
 
     def _apply_quality(self, _event=None):
         faces, resolution = {'Leve': ('18000','1024'),
@@ -488,8 +490,24 @@ class Forge(tk.Tk):
         self._button(buttons, 'Basecoat ↗', lambda: webbrowser.open('https://store.steampowered.com/app/4468700/Basecoat_Mini_Painting_Studio/')).pack(side='left')
 
     def _draw_tsmod(self):
-        card, body = self._card(self.tab_tsmod, 'Arquivo .tsMod pronto para o TaleSpire')
-        card.pack(fill='both', expand=True, padx=5, pady=17)
+        # Compare UI adds a second file picker: keep Install visible even at 1020×690.
+        self.tsmod_canvas = tk.Canvas(self.tab_tsmod, bg=BG, highlightthickness=0)
+        scroll = tk.Scrollbar(self.tab_tsmod, orient='vertical',
+                              command=self.tsmod_canvas.yview)
+        self.tsmod_canvas.configure(yscrollcommand=scroll.set)
+        scroll.pack(side='right', fill='y')
+        self.tsmod_canvas.pack(side='left', fill='both', expand=True)
+        shell = tk.Frame(self.tsmod_canvas, bg=BG)
+        window = self.tsmod_canvas.create_window((0, 0), window=shell, anchor='nw')
+        shell.bind('<Configure>', lambda e: self.tsmod_canvas.configure(
+            scrollregion=self.tsmod_canvas.bbox('all')))
+        self.tsmod_canvas.bind('<Configure>', lambda e: self.tsmod_canvas.itemconfigure(
+            window, width=max(300, e.width - 14)))
+        self.tsmod_canvas.bind('<Enter>', lambda e: self.bind_all(
+            '<MouseWheel>', self._scroll_wheel))
+        self.tsmod_canvas.bind('<Leave>', lambda e: self.unbind_all('<MouseWheel>'))
+        card, body = self._card(shell, 'Arquivo .tsMod pronto para o TaleSpire')
+        card.pack(fill='x', padx=5, pady=17)
         self._label(body, 'Analise seu .tsMod e instale na pasta oficial LocalContentPacks.',
                     fg=FG, font=('Segoe UI', 10)).pack(anchor='w', pady=(1, 18))
         self._field(body, 'ARQUIVO .TSMOD', self.tsmod_file, self._choose_tsmod)
