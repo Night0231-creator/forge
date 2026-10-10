@@ -26,6 +26,7 @@ from core.archive import extract_meshy_zip
 from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
+from core.quality_notes import quality_notes
 from core.preferences import load_preferences, open_output_folder, save_preferences
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
 
@@ -922,6 +923,8 @@ class Forge(tk.Tk):
             dest = Path(cfg['output_root']) / cfg['name']
             stats_path = dest / 'blender_stats.json'
             stats = json.loads(stats_path.read_text(encoding='utf-8'))
+            for note in quality_notes(stats):
+                self.log_events.put(('log', '[QUALIDADE] ' + note))
             create_instructions(dest, cfg['name'], stats)
             write_manifest(dest, cfg, stats)
             stats_path.unlink(missing_ok=True)
