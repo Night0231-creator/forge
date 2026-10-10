@@ -25,6 +25,9 @@ from core.discovery import tool_status
 from core.archive import extract_meshy_zip
 from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
+from core.scale_audit import audit_scale
+from core.quality_notes import quality_notes
+from core.version import APP_VERSION
 from core.preferences import load_preferences, open_output_folder, save_preferences
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
 
@@ -140,7 +143,7 @@ class Forge(tk.Tk):
                            fill=FG, font=('Segoe UI', 24, 'bold'))
         header.create_text(34, 78, anchor='w', text='MESHY AI  →  BLENDER  →  TALEWEAVERCMD  →  TALESPIRE',
                            fill='#BAA8E8', font=('Segoe UI', 10, 'bold'))
-        header.create_text(935, 92, anchor='e', text='VERSÃO 2.2.2  •  WINDOWS',
+        header.create_text(935, 92, anchor='e', text=f'VERSÃO {APP_VERSION}  •  WINDOWS',
                            fill='#C3B5F3', font=('Segoe UI', 9, 'bold'))
         content = tk.Frame(self, bg=BG)
         content.pack(fill='both', expand=True, padx=22, pady=(14, 12))
@@ -541,6 +544,8 @@ class Forge(tk.Tk):
                     'você pode ajustar Entrada_TaleWeaverCmd/params.json manualmente antes '
                     'de executar novamente. O TaleSpire continua sendo o teste final.',
                     fg=MUTED, font=('Segoe UI', 10), wraplength=840).pack(anchor='w', pady=(0, 19))
+        self._button(body, 'Diagnosticar escala 1×1 de uma miniatura preparada',
+                     self._diagnose_scale, padx=11, pady=8).pack(anchor='w', pady=(0, 10))
         self._button(body, 'Gerar .tsMod de uma pasta já preparada', self._rerun_cmd,
                      accent=True).pack(anchor='w', pady=(4, 12))
         self._label(body, 'Ao repetir a geração, não é necessário passar pelo Blender outra vez. '
@@ -599,6 +604,26 @@ class Forge(tk.Tk):
         if not math.isfinite(value) or not 0.5 <= value <= 40:
             raise ValueError('Altura alvo: use um valor entre 0,5 e 40.')
         return value
+
+    def _diagnose_scale(self):
+        """Preview the automatic scaling formula; never touch the model."""
+        root = Path(self.target.get()).expanduser()
+        folder = filedialog.askdirectory(
+            title='Pasta da miniatura com TaleWeaverCmd_Source',
+            initialdir=str(root) if root.is_dir() else str(Path.home()))
+        if not folder:
+            return
+        destination = Path(folder)
+        obj = destination / 'TaleWeaverCmd_Source' / (destination.name + '.obj')
+        try:
+            target = float(self.target_height.get().strip().replace(',', '.'))
+            report = audit_scale(inspect_obj(obj), target)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Não foi possível diagnosticar', str(exc))
+            return
+        title = ('Escala 1×1: base limita a altura' if report.footprint_limited
+                 else 'Escala 1×1: dimensões dentro da referência')
+        messagebox.showwarning(title, report.summary()) if report.footprint_limited else messagebox.showinfo(title, report.summary())
 
     def _rerun_cmd(self):
         if self.busy:
@@ -899,6 +924,8 @@ class Forge(tk.Tk):
             dest = Path(cfg['output_root']) / cfg['name']
             stats_path = dest / 'blender_stats.json'
             stats = json.loads(stats_path.read_text(encoding='utf-8'))
+            for note in quality_notes(stats):
+                self.log_events.put(('log', '[QUALIDADE] ' + note))
             create_instructions(dest, cfg['name'], stats)
             write_manifest(dest, cfg, stats)
             stats_path.unlink(missing_ok=True)

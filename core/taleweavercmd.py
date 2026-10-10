@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from .geometry import inspect_obj, suggest_factor, suggest_safe_factor
+from .scale_audit import audit_scale
 
 REQUIRED_FILES = (
     'model.obj', 'albedo.png', 'metallic_ao_emis_smoothness.png',
@@ -200,7 +201,8 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
     # Detailed geometry inspection is mandatory only for automatic scaling.
     source_stats = (inspect_obj(folder / 'TaleWeaverCmd_Source' / f'{name}.obj')
                     if target_height is not None else None)
-    scale_factor = (suggest_safe_factor(source_stats, float(target_height)) if source_stats is not None
+    scale_check = audit_scale(source_stats, float(target_height)) if source_stats is not None else None
+    scale_factor = (scale_check.applied_factor if scale_check is not None
                     else float(scale_factor))
     actual_height = (source_stats.height if source_stats is not None else height) * scale_factor
     if not math.isfinite(scale_factor) or not 0.1 <= scale_factor <= 100:
@@ -235,7 +237,8 @@ def prepare_cmd_input(folder: Path, name: str, height: float = 1.75, *, preserve
                                            'source_height': (source_stats.height if source_stats else height),
                                            'effective_height': actual_height,
                                            'width': (source_stats.width * scale_factor if source_stats else None),
-                                           'depth': (source_stats.depth * scale_factor if source_stats else None)}, indent=2), encoding='utf-8')
+                                           'depth': (source_stats.depth * scale_factor if source_stats else None),
+                                           'scale_check': (scale_check.to_dict() if scale_check else None)}, indent=2), encoding='utf-8')
     return stage
 
 
@@ -298,6 +301,8 @@ def run_taleweavercmd(executable: Path, folder: Path, name: str,
     if output.exists():
         output.unlink()
     log_path = stage / 'taleweavercmd.log'
+    # Não atribuir erros de uma execução antiga ao processo que inicia agora.
+    log_path.unlink(missing_ok=True)
     args = [str(executable), '-srcDir', str(stage), '-logFile', str(log_path)]
     process = subprocess.Popen(args, cwd=str(executable.parent), stdin=subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

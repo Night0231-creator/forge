@@ -12,6 +12,8 @@ import math
 import numpy as np
 from PIL import Image, ImageOps
 
+from .size_reference import paint_reference
+
 MAX_TRIANGLES = 150000
 MAX_TEXTURE_PIXELS = 4096 * 4096
 
@@ -108,7 +110,8 @@ def read_albedo(path: Path, max_side: int = 1024) -> np.ndarray:
 
 def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
          zoom: float, width: int, height: int, pan_x: float = 0,
-         pan_y: float = 0, wire: bool = False) -> Image.Image:
+         pan_y: float = 0, wire: bool = False,
+         show_reference: bool = False, reference_height: float = 1.75) -> Image.Image:
     """CPU preview: orthographic barycentric UV, nearest sampling, Z buffer.
 
     Returns Pillow image. UI layer displays it through ImageTk on the Tk thread.
@@ -122,7 +125,9 @@ def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
     points = mesh.points.astype(np.float64, copy=False)
     lo = points.min(axis=0)
     hi = points.max(axis=0)
-    extent = max(float((hi-lo).max()), 1e-5)
+    if show_reference and (not math.isfinite(reference_height) or reference_height <= 0):
+        raise PreviewError('Altura de referencia invalida.')
+    extent = max(float((hi-lo).max()), reference_height if show_reference else 0.0, 1e-5)
     coords = points-(lo+hi)*0.5
     c, s = math.cos(yaw), math.sin(yaw)
     cp, sp = math.cos(pitch), math.sin(pitch)
@@ -130,8 +135,9 @@ def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
     z = s*coords[:, 0] + c*coords[:, 2]
     y = cp*coords[:, 1] - sp*z
     d = sp*coords[:, 1] + cp*z
-    unit = min(width * .62, height * .74)/extent*zoom
-    px = width*.5+x*unit+pan_x
+    # Reserve space at right for the 1x1 ruler; never rescale the mesh alone.
+    unit = min(width * (.50 if show_reference else .62), height * .74)/extent*zoom
+    px = width*(.37 if show_reference else .5)+x*unit+pan_x
     py = height*.55-y*unit+pan_y
     # Use a fixed light vector for legible material shading.
     light_dir = np.array([0.35, 0.75, 0.56])
@@ -167,15 +173,34 @@ def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
             continue
         u = w0*uv[0][0] + w1*uv[1][0] + w2*uv[2][0]
         v = w0*uv[0][1] + w1*uv[1][1] + w2*uv[2][1]
-        tx = np.clip(np.rint(u[mask]*(tw-1)).astype(np.int32),0,tw-1)
-        ty = np.clip(np.rint((1.0-v[mask])*(th-1)).astype(np.int32),0,th-1)
+        # Bilinear albedo improves small textures, faces and armor in the preview.
+        # Sampling is clamped to the image edges (no changes to exported UVs).
+        tx = np.clip(u[mask]*(tw-1), 0, tw-1)
+        ty = np.clip((1.0-v[mask])*(th-1), 0, th-1)
+        ix, iy = tx.astype(np.int32), ty.astype(np.int32)
+        ix1, iy1 = np.minimum(ix+1, tw-1), np.minimum(iy+1, th-1)
+        fx, fy = (tx-ix)[:,None], (ty-iy)[:,None]
+        c00 = albedo[iy, ix].astype(np.float32)
+        c10 = albedo[iy, ix1].astype(np.float32)
+        c01 = albedo[iy1, ix].astype(np.float32)
+        c11 = albedo[iy1, ix1].astype(np.float32)
+        filtered = (c00*(1-fx)*(1-fy) + c10*fx*(1-fy)
+                    + c01*(1-fx)*fy + c11*fx*fy)
         tri_points = points[ids]
         normal = np.cross(tri_points[1]-tri_points[0],tri_points[2]-tri_points[0])
         nrm = float(np.linalg.norm(normal))
         shade = 0.67 + .33*abs(float(np.dot(normal,light_dir)/nrm)) if nrm>1e-10 else 1.0
-        sample = np.clip(albedo[ty, tx].astype(np.float32)*shade,0,255).astype(np.uint8)
+        sample = np.clip(filtered*shade,0,255).astype(np.uint8)
         section = rgb[top:bottom+1,left:right+1]
         section[mask] = sample
         slice_depth[mask] = dz[mask].astype(np.float32)
 
-    return Image.fromarray(rgb, mode='RGB')
+    frame = Image.fromarray(rgb, mode='RGB')
+    if show_reference:
+        paint_reference(frame, base_y=float(lo[1]),
+                        center_y=float((lo[1]+hi[1])*.5),
+                        model_height=float(hi[1]-lo[1]),
+                        pixels_per_unit=unit, pitch=pitch,
+                        pan_x=pan_x, pan_y=pan_y,
+                        reference_height=reference_height)
+    return frame

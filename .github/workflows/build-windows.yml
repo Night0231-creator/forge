@@ -1,5 +1,7 @@
-name: Astronyx Mini Forge Studio 2.2.5 Windows (Win10/Win11)
+name: Astronyx Mini Forge Studio 2.2.6 Windows (Win10/Win11)
 on:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish_release:
@@ -7,8 +9,13 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, master, v2.2-ui, 'fix/win10-win11-4551', 'fix/v2.2.2-scale-quality', 'feat/v2.2.3-hud-polish', 'fix/v2.2.4-safe-updater', 'fix/v2.2.5-taleweavercmd-diagnostics']
+    branches: [main, master, v2.2-ui, 'fix/win10-win11-4551', 'fix/v2.2.2-scale-quality', 'feat/v2.2.3-hud-polish', 'fix/v2.2.4-safe-updater', 'fix/v2.2.6-taleweavercmd-diagnostics']
     tags: ['v*']
+
+# A new commit cancels obsolete PR builds; main/tag releases use their own group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   windows:
@@ -42,7 +49,7 @@ jobs:
       - name: Gerar hashes SHA256
         shell: powershell
         run: |
-          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.5.exe', 'dist/AstronyxMiniForgeStudio-Portable-v2.2.5-Win10-Win11-x64.zip')
+          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.6.exe', 'dist/AstronyxMiniForgeStudio-Portable-v2.2.6-Win10-Win11-x64.zip')
           foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
@@ -60,13 +67,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Portable-ZIP
-          path: dist/AstronyxMiniForgeStudio-Portable-v2.2.5-Win10-Win11-x64.zip
+          path: dist/AstronyxMiniForgeStudio-Portable-v2.2.6-Win10-Win11-x64.zip
           if-no-files-found: error
       - name: Enviar instalador
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Setup
-          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.5.exe
+          path: dist/installer/AstronyxMiniForgeStudio-Setup-v2.2.6.exe
           if-no-files-found: error
 
   compatibility:

@@ -5,6 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from core.version import APP_VERSION
+
 PROJECT = Path(__file__).resolve().parents[1]
 
 
@@ -26,4 +28,4 @@ class PackagedSelfTest(unittest.TestCase):
         result = subprocess.run([sys.executable, str(PROJECT/'studio.py'), '--version'],
                                 capture_output=True, text=True, cwd=PROJECT, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('2.2.5', result.stdout)
+        self.assertIn(APP_VERSION, result.stdout)
