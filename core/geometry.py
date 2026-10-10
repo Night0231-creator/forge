@@ -93,16 +93,22 @@ def suggest_factor(obj_height: float, reference_height: float = 1.75) -> float:
     return value
 
 def suggest_safe_factor(stats: ObjStats, reference_height: float = 1.75,
-                        footprint_limit: float = 1.30) -> float:
-    """Limit OBJ height and horizontal bounds, not gameplay collider."""
+                        footprint_limit: float | None = None) -> float:
+    """Keep character height: horizontal accessories must not shrink the mesh.
+
+    TaleSpire creature base size is not inferred from a bounding-box width.
+    An explicit footprint cap remains available for older/manual workflows,
+    but the Basecoat-inspired default follows the vertical height ONLY.
+    """
     factor = suggest_factor(stats.height, reference_height)
-    if not math.isfinite(footprint_limit) or footprint_limit <= 0.2:
-        raise ValueError('Largura de base invalida.')
     footprint = max(stats.width, stats.depth)
     if not math.isfinite(footprint):
         raise ValueError('Dimensoes invalidas.')
-    if footprint > 1e-6:
-        factor = min(factor, footprint_limit / footprint)
+    if footprint_limit is not None:
+        if not math.isfinite(footprint_limit) or footprint_limit <= 0.2:
+            raise ValueError('Largura de base invalida.')
+        if footprint > 1e-6:
+            factor = min(factor, footprint_limit / footprint)
     if not 0.1 <= factor <= 100:
         raise ValueError('Escala insegura. Ajuste o modelo no Blender.')
     return factor
