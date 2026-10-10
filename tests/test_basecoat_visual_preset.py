@@ -39,8 +39,8 @@ class BasecoatVisualPresetTests(unittest.TestCase):
         self.assertAlmostEqual(report.effective_width, 6.0)
 
     def test_calibration_is_explicit_bounded_and_increases_height(self):
-        self.assertAlmostEqual(suggest_calibration_height(1.75,1.25),2.188)
-        self.assertAlmostEqual(suggest_calibration_height(2.188,1.25),2.735)
+        self.assertAlmostEqual(suggested_calibration_height(1.75,1.25),2.188)
+        self.assertAlmostEqual(suggested_calibration_height(2.188,1.25),2.735)
         for ratio in (-1, 0, float('nan'), 200):
             with self.assertRaises(ValueError):
                 suggested_calibration_height(1.75,ratio)
