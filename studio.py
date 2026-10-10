@@ -99,7 +99,7 @@ class UpdateInterface:
                 event = self.update_events.get_nowait()
                 if event[0] == 'check':
                     self._checking_updates = False
-                    if event[1] and should_show_update(
+                    if event[1] and (event[2] or self.auto_update_check.get()) and should_show_update(
                             event[1].version, self._last_notified_version,
                             manual=event[2]):
                         self._last_notified_version = event[1].version
