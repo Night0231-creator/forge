@@ -21,7 +21,7 @@ class ScaleAuditTests(unittest.TestCase):
 
     def test_accessories_limit_height_and_report_reason(self):
         stats = ObjStats(4, 2, (-2, 0, -.5), (2, 2, .5))
-        report = audit_scale(stats)
+        report = audit_scale(stats, footprint_limit=1.30)
         self.assertTrue(report.footprint_limited)
         self.assertEqual(report.status, 'base_limitada')
         self.assertAlmostEqual(report.applied_factor, .325)
@@ -49,10 +49,19 @@ class ScaleAuditTests(unittest.TestCase):
                 (folder / png).write_bytes(b'fixture')
             stage = prepare_cmd_input(root, 'Knight', target_height=1.75)
             audit = json.loads((root / 'TaleWeaverCmd_escala.json').read_text())['scale_check']
-            self.assertTrue(audit['footprint_limited'])
+            self.assertFalse(audit['footprint_limited'])
+            self.assertAlmostEqual(audit['effective_height'], 1.75)
             self.assertAlmostEqual(audit['effective_height'],
                                    inspect_obj(stage / 'model.obj').height)
             self.assertEqual(source.read_text(encoding='utf-8'), original)
+
+    def test_wide_wings_keep_full_requested_height_by_default(self):
+        stats = ObjStats(6, 2, (-3, 0, -.5), (3, 2, .5))
+        report = audit_scale(stats)
+        self.assertFalse(report.footprint_limited)
+        self.assertAlmostEqual(report.effective_height, 1.75)
+        self.assertGreater(report.effective_width, 1.30)
+        self.assertIn('A altura-alvo foi preservada', report.explanation())
 
 
 if __name__ == '__main__':
