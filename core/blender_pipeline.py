@@ -17,6 +17,12 @@ import bmesh
 import numpy as np
 from mathutils import Matrix
 
+# Blender uses its own Python runtime: load this sibling from files bundled
+# in PyInstaller's _internal/core, not from the Studio process.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from obj_vertex_budget import (inspect_obj_vertex_budget,
+                               next_triangle_budget, SAFE_SPLIT_VERTEX_TARGET)
+
 
 def status(percent, msg):
     print(f"AMF_PROGRESS|{int(percent)}|{msg}", flush=True)
@@ -512,6 +518,47 @@ def export_plugin_obj(obj, folder, name, albedo_file):
     filepath.write_text('\n'.join(body) + '\n', encoding='utf-8')
 
 
+def enforce_taleweaver_vertex_budget(obj, cmd_dir, name, albedo_file):
+    """Decimate and re-export the *actual* OBJ until UV/normal splits fit safely.
+
+    Blender object vertex counts alone miss splits created by seams and sharp
+    normals. Work on the baked output mesh, leaving source Meshy files intact.
+    Unity has the final word; TaleWeaverCmd errors remain actionable.
+    """
+    for attempt in range(7):
+        export_plugin_obj(obj, cmd_dir, name, albedo_file)
+        budget = inspect_obj_vertex_budget(cmd_dir / (name + '.obj'))
+        if not budget.faces:
+            raise ValueError('OBJ exportado não contém faces triangulares.')
+        status(91, f'Vertices Blender: {len(obj.data.vertices)} | '
+               f'OBJ com UV/normais: {budget.split_vertices} '
+               f'(alvo de seguranca: {SAFE_SPLIT_VERTEX_TARGET})')
+        if budget.split_vertices <= SAFE_SPLIT_VERTEX_TARGET:
+            return budget, attempt
+        faces = len(obj.data.polygons)
+        if faces <= 600:
+            break
+        target = next_triangle_budget(faces, budget.split_vertices)
+        ratio = max(.02, min(.85, target / faces))
+        previous = len(obj.data.polygons)
+        activate(obj)
+        mod = obj.modifiers.new('Astronyx_TaleWeaver_VertexBudget', 'DECIMATE')
+        mod.ratio = ratio
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        obj.data.update()
+        if len(obj.data.polygons) >= previous:
+            break
+        print('AMF_WARNING|Reduzindo geometria para respeitar o limite '
+              'de vertices reais do TaleWeaverCmd. '
+              f'Passagem {attempt + 1}: {previous} -> '
+              f'{len(obj.data.polygons)} triangulos.', flush=True)
+    raise ValueError(
+        'A malha exportada ainda possui vertices UV/normal demais para '
+        'TaleWeaverCmd. Selecione 45.000 triangulos e converta novamente '
+        'o GLB original do Meshy.'
+    )
+
+
 def render_thumbnail(obj, output, height):
     """Create TaleWeaverCmd-required 512x512 character portrait using Blender."""
     from mathutils import Vector
@@ -599,14 +646,25 @@ def main():
     stats['texture_bake_size'] = cfg['texture_size']
     stats['taleweaver_texture_max_side'] = min(2048, cfg['texture_size'])
     assign_final_material(obj, albedo, used_uv)
-    status(89, 'Exportando modelo FBX para TaleWeaverLite')
-    export_fbx(obj, tw, cfg['name'])
     if cfg.get('create_taleweavercmd', False):
-        status(92, 'Preparando OBJ e texturas para TaleWeaverCmd')
+        status(90, 'Exportando e verificando limite de vertices do TaleWeaverCmd')
         cmd_dir = out / 'TaleWeaverCmd_Source'
-        export_plugin_obj(obj, cmd_dir, cfg['name'], tw / 'Albedo.png')
+        budget, reductions = enforce_taleweaver_vertex_budget(
+            obj, cmd_dir, cfg['name'], tw / 'Albedo.png')
+        stats['taleweavercmd_obj_split_vertices'] = budget.split_vertices
+        stats['taleweavercmd_obj_positions'] = budget.positions
+        stats['taleweavercmd_vertex_reductions'] = reductions
+        stats['vertices'] = len(obj.data.vertices)
+        stats['triangles'] = len(obj.data.polygons)
+        original_tris = stats.get('initial_triangles', len(obj.data.polygons))
+        stats['triangle_retention_percent'] = round(
+            100 * stats['triangles'] / max(1, original_tris), 1)
         for tex in ('Albedo.png', 'Normal.png', 'MAES.png'):
             shutil.copy2(tw / tex, cmd_dir / tex)
+        # The OBJ and FBX must describe the same final low-poly mesh.
+    status(93, 'Exportando FBX final para TaleWeaverLite')
+    export_fbx(obj, tw, cfg['name'])
+    if cfg.get('create_taleweavercmd', False):
         status(94, 'Criando imagem da miniatura para TaleWeaverCmd')
         try:
             # Center camera on effective mesh height after footprint corrections.
