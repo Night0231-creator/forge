@@ -347,15 +347,78 @@ def blank_normal(size):
     return normal
 
 
+
+def try_preserve_png_albedo(obj, uv_name, output):
+    """Keep exact PNG pixels when the source shader is a direct UV-to-color PNG.
+
+    Avoid unnecessary Cycles baking of Meshy's original face/hair/armor albedo.
+    Complex or multi-material graphs still go through the regular bake path;
+    no assumption is made about non-PNG packed files or transformed UVs.
+    """
+    if uv_name != 'AMF_Original' or len(obj.data.materials) != 1:
+        return None
+    material = obj.data.materials[0]
+    if material is None or not material.use_nodes:
+        return None
+    nodes = material.node_tree.nodes
+    principled = next((node for node in nodes if node.type == 'BSDF_PRINCIPLED'), None)
+    if principled is None:
+        return None
+    base = principled.inputs.get('Base Color')
+    if base is None or not base.is_linked:
+        return None
+    link = base.links[0]
+    texture = link.from_node
+    if texture.type != 'TEX_IMAGE' or link.from_socket.name != 'Color':
+        return None
+    image = texture.image
+    if image is None or image.source != 'FILE':
+        return None
+    if not (0 < image.size[0] <= 2048 and 0 < image.size[1] <= 2048):
+        return None
+    # In case the source material deliberately uses UV transforms, bake the
+    # shading instead; a bare texture copy would otherwise have wrong mapping.
+    vector = texture.inputs.get('Vector')
+    if vector is not None and vector.is_linked:
+        uv_link = vector.links[0]
+        if (uv_link.from_node.type != 'UVMAP'
+                or uv_link.from_node.uv_map != uv_name):
+            return None
+
+    png_sig = b'\x89PNG\r\n\x1a\n'
+    try:
+        if image.packed_file is not None:
+            payload = bytes(image.packed_file.data)
+            if not payload.startswith(png_sig):
+                return None
+            output.write_bytes(payload)
+        else:
+            source = Path(bpy.path.abspath(image.filepath, library=image.library))
+            if not source.is_file():
+                return None
+            with source.open('rb') as stream:
+                if stream.read(8) != png_sig:
+                    return None
+            shutil.copy2(source, output)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        print('AMF_WARNING|Nao foi possivel copiar PNG original: ' + str(exc), flush=True)
+        return None
+    print('AMF_PROGRESS|58|PNG albedo original preservado sem recompressao', flush=True)
+    return image
+
+
 def bake_textures(obj, folder, size):
     status(52, 'Criando atlas de UV e texturas')
     uv_name = make_uv_atlas(obj)
     bpy.context.scene.render.engine = 'CYCLES'
     bpy.context.scene.cycles.device = 'CPU'
-    albedo = new_image('AMF_Albedo', size)
-    status(58, 'Renderizando albedo')
-    run_bake(obj, 'DIFFUSE', albedo, pass_filter={'COLOR'})
-    save_image(albedo, folder / 'Albedo.png')
+    albedo = try_preserve_png_albedo(obj, uv_name, folder / 'Albedo.png')
+    kept_original_png = albedo is not None
+    if not kept_original_png:
+        albedo = new_image('AMF_Albedo', size)
+        status(58, 'Renderizando albedo')
+        run_bake(obj, 'DIFFUSE', albedo, pass_filter={'COLOR'})
+        save_image(albedo, folder / 'Albedo.png')
     status(66, 'Renderizando normal map')
     normal = new_image('AMF_Normal_Baked', size, is_data=True)
     try:
@@ -384,7 +447,7 @@ def bake_textures(obj, folder, size):
     packed.pixels.foreach_set(a)
     packed.update()
     save_image(packed, folder / 'MAES.png')
-    return albedo, normal, uv_name
+    return albedo, normal, uv_name, kept_original_png
 
 
 def assign_final_material(obj, albedo_image, uv_name):
@@ -526,8 +589,9 @@ def main():
     if max(stats['width'], stats['depth']) > cfg['height'] * 1.8:
         print('AMF_WARNING|Modelo muito largo ou profundo; a base pode ser maior por causa de asas e acessorios.', flush=True)
     status(45, f"Malha pronta: {stats['vertices']} vertices / {stats['triangles']} triangulos")
-    albedo, _, used_uv = bake_textures(obj, tw, cfg['texture_size'])
+    albedo, _, used_uv, original_png = bake_textures(obj, tw, cfg['texture_size'])
     stats['uv_mode'] = 'original' if used_uv == 'AMF_Original' else 'repacked'
+    stats['albedo_method'] = 'png_original' if original_png else 'cycles_baked'
     stats['bake_samples'] = 4
     stats['bake_margin_px'] = max(8, min(12, cfg['texture_size'] // 256))
     stats['texture_bake_size'] = cfg['texture_size']
