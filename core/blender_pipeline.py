@@ -186,6 +186,7 @@ def optimize(obj, desired_faces):
     bm.free()
     obj.data.update()
     faces = len(obj.data.polygons)
+    initial_triangles = faces
     if faces > desired_faces:
         dec = obj.modifiers.new('Astronyx_LowPoly', 'DECIMATE')
         dec.ratio = max(0.001, desired_faces / faces)
@@ -213,8 +214,12 @@ def optimize(obj, desired_faces):
         raise ValueError('O modelo ainda excede 60.000 vertices. Reduza o limite de triangulos.')
     if source_faces and len(obj.data.polygons) < source_faces * 0.55:
         print('AMF_WARNING|Malha reduzida mais de 45 por cento; detalhes finos podem mudar.', flush=True)
+    retained = (min(100., 100. * len(obj.data.polygons) / initial_triangles)
+                if initial_triangles else 100.)
     return {'vertices': len(obj.data.vertices), 'triangles': len(obj.data.polygons),
-            'original_vertices': source_vertices, 'original_faces': source_faces}
+            'original_vertices': source_vertices, 'original_faces': source_faces,
+            'initial_triangles': initial_triangles,
+            'triangle_retention_percent': round(retained, 1)}
 
 
 def make_uv_atlas(obj):
@@ -239,7 +244,8 @@ def make_uv_atlas(obj):
     layer.active_render = True
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(island_margin=0.01)
+    # Keep space for an 8-12px bake bleed while improving atlas utilization.
+    bpy.ops.uv.smart_project(island_margin=0.008)
     bpy.ops.object.mode_set(mode='OBJECT')
     return layer.name
 
@@ -277,9 +283,11 @@ def run_bake(obj, kind, image, *, pass_filter=None):
             add_image_target(material, image)
     activate(obj)
     bpy.context.scene.render.engine = 'CYCLES'
-    bpy.context.scene.cycles.samples = 1
+    # More robust antialiasing at UV seams with limited additional CPU cost.
+    bpy.context.scene.cycles.samples = 4
     bpy.context.scene.render.bake.use_selected_to_active = False
-    opts = {'type': kind, 'margin': 6, 'use_clear': True}
+    margin = max(8, min(12, image.size[0] // 256))
+    opts = {'type': kind, 'margin': margin, 'use_clear': True}
     if pass_filter is not None:
         opts['pass_filter'] = pass_filter
     bpy.ops.object.bake(**opts)
@@ -520,6 +528,10 @@ def main():
     status(45, f"Malha pronta: {stats['vertices']} vertices / {stats['triangles']} triangulos")
     albedo, _, used_uv = bake_textures(obj, tw, cfg['texture_size'])
     stats['uv_mode'] = 'original' if used_uv == 'AMF_Original' else 'repacked'
+    stats['bake_samples'] = 4
+    stats['bake_margin_px'] = max(8, min(12, cfg['texture_size'] // 256))
+    stats['texture_bake_size'] = cfg['texture_size']
+    stats['taleweaver_texture_max_side'] = min(2048, cfg['texture_size'])
     assign_final_material(obj, albedo, used_uv)
     status(89, 'Exportando modelo FBX para TaleWeaverLite')
     export_fbx(obj, tw, cfg['name'])
@@ -531,7 +543,8 @@ def main():
             shutil.copy2(tw / tex, cmd_dir / tex)
         status(94, 'Criando imagem da miniatura para TaleWeaverCmd')
         try:
-            render_thumbnail(obj, cmd_dir / 'thumbnail.png', cfg['height'])
+            # Center camera on effective mesh height after footprint corrections.
+            render_thumbnail(obj, cmd_dir / 'thumbnail.png', stats['height'])
         except Exception as ex:
             print('AMF_WARNING|Imagem 3D de miniatura falhou; usando albedo como reserva: ' + str(ex), flush=True)
             shutil.copy2(tw / 'Albedo.png', cmd_dir / 'thumbnail.png')
