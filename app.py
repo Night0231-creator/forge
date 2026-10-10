@@ -16,7 +16,7 @@ import tkinter as tk
 import webbrowser
 import zipfile
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, ttk, simpledialog
 
 from core.helpers import (SUPPORTED, create_instructions, find_blender,
                           safe_slug, validate_config, write_manifest)
@@ -28,6 +28,7 @@ from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
 from core.quality_notes import quality_notes
+from core.taleweaverlite_handoff import prepare_taleweaverlite_handoff
 from core.version import APP_VERSION
 from core.scale_profile import is_meshy_model, preset_values, BASECOAT_VISUAL_PRESET_NAME, suggested_calibration_height
 from ui.rounded import RoundedButton, RoundedEntry, RoundedSelect
@@ -593,6 +594,12 @@ class Forge(tk.Tk):
                     fg=MUTED, font=('Segoe UI', 10), wraplength=840).pack(anchor='w', pady=(0, 19))
         self._button(body, 'Diagnosticar escala 1×1 de uma miniatura preparada',
                      self._diagnose_scale, padx=11, pady=8).pack(anchor='w', pady=(0, 10))
+        self._button(body, 'Preparar TaleWeaverLite (Transform visual + Default Scale 1×1)',
+                     self._prepare_twl_handoff, padx=11, pady=8).pack(anchor='w', pady=(0,10))
+        self._label(body, 'Fluxo experimental via Unity: modelo com pivô nos pés, '
+                    'texturas e guia para ajustar tamanho visual separado de '
+                    'Default Scale = 1. O .tsMod final é salvo no TaleWeaverLite.',
+                    fg=MUTED, wraplength=850).pack(anchor='w',pady=(0,14))
         self._button(body, 'Gerar .tsMod de uma pasta já preparada', self._rerun_cmd,
                      accent=True).pack(anchor='w', pady=(4, 12))
         self._label(body, 'Ao repetir a geração, não é necessário passar pelo Blender outra vez. '
@@ -671,6 +678,38 @@ class Forge(tk.Tk):
         title = ('Escala 1×1: base limita a altura' if report.footprint_limited
                  else 'Escala 1×1: dimensões dentro da referência')
         messagebox.showwarning(title, report.summary()) if report.footprint_limited else messagebox.showinfo(title, report.summary())
+
+    def _prepare_twl_handoff(self):
+        """Export materials for official TaleWeaverLite. Does NOT run Unity."""
+        root = Path(self.target.get()).expanduser()
+        folder = filedialog.askdirectory(
+            title='Pasta já convertida com TaleWeaverLite e TaleWeaverCmd_Source',
+            initialdir=str(root) if root.is_dir() else str(Path.home()))
+        if not folder:
+            return
+        factor = simpledialog.askfloat(
+            'Tamanho visual no Unity',
+            'Valor para testar em Transform (não altera a malha):\n'
+            '8× ficou próximo do tamanho desejado no Eclipse Warlord.\n'
+            'Default Scale permanece 1×1 no TaleWeaverLite.',
+            initialvalue=8.0, minvalue=0.5, maxvalue=12.0, parent=self)
+        if factor is None:
+            return
+        try:
+            zip_path, report = prepare_taleweaverlite_handoff(
+                folder, visual_multiplier=factor, default_scale=1)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Falha ao preparar TaleWeaverLite',str(exc))
+            return
+        messagebox.showinfo(
+            'Pacote Unity preparado',
+            f"ZIP: {zip_path}\n\n"
+            f"Altura da malha: {report['source_obj_height']} unidades\n"
+            f"Transform visual sugerido: {factor:g}×\n"
+            'Default Scale: 1×1\n\n'
+            'Use o guia LEIA_PRIMEIRO.txt do ZIP. '
+            'A exportação .tsMod requer o projeto TaleWeaverLite no Unity. '
+            'A movimentação só poderá ser confirmada dentro do jogo.')
 
     def _rerun_cmd(self):
         if self.busy:
