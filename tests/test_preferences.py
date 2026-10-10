@@ -45,6 +45,16 @@ class TestPreferences(unittest.TestCase):
                                  auto_update_check=enabled)
                 self.assertEqual(load_preferences(path)['auto_update_check'], enabled)
 
+    def test_tsmod_reference_is_optional_and_saved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'preferences.json'
+            self.assertEqual(load_preferences(path)['reference_tsmod'], '')
+            reference = r'C:\\Miniaturas\\Eclipse Warlord.tsMod'
+            save_preferences(path, output_root=tmp, blender='',
+                             open_after_conversion=False,
+                             reference_tsmod=reference)
+            self.assertEqual(load_preferences(path)['reference_tsmod'], reference)
+
     def test_corrupt_settings_do_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'settings.json'
