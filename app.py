@@ -28,6 +28,7 @@ from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
 from core.quality_notes import quality_notes
 from core.version import APP_VERSION
+from ui.rounded import RoundedButton, RoundedEntry, RoundedSelect
 from core.preferences import load_preferences, open_output_folder, save_preferences
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
 
@@ -72,6 +73,7 @@ class Forge(tk.Tk):
         self.cmd_executable = tk.StringVar(value=stored['cmd_executable'] or find_taleweavercmd() or '')
         self.name = tk.StringVar(value='')
         self.auto_open = tk.BooleanVar(value=stored['open_after_conversion'])
+        self.auto_update_check = tk.BooleanVar(value=stored['auto_update_check'])
         self.install_after = tk.BooleanVar(value=stored['install_after_conversion'])
         self.output_preview = tk.StringVar(value='')
         self.name.trace_add('write', lambda *_: self._update_output_preview())
@@ -127,11 +129,10 @@ class Forge(tk.Tk):
 
     def _button(self, parent, text, command, accent=False, **kw):
         background = ACCENT2 if accent else FIELD
-        btn = tk.Button(parent, text=text, command=command, bg=background, fg=FG,
-                        activebackground=ACCENT if accent else BORDER, activeforeground='#FFF',
-                        relief='flat', bd=0, padx=kw.get('padx', 16), pady=kw.get('pady', 10),
-                        font=('Segoe UI', 10, 'bold'), cursor='hand2')
-        return btn
+        return RoundedButton(parent, text, command, bg=background,
+                             hover=ACCENT if accent else BORDER, fg=FG,
+                             padx=kw.get('padx', 16), pady=kw.get('pady', 10),
+                             parent_bg=parent.cget('bg'))
 
     def _draw(self):
         header = tk.Canvas(self, height=116, highlightthickness=0, bg='#100F20')
@@ -199,7 +200,8 @@ class Forge(tk.Tk):
         self._label(parent, label).pack(anchor='w', pady=(4, 5))
         line = tk.Frame(parent, bg=PANEL)
         line.pack(fill='x', pady=(0, 7))
-        entry = ttk.Entry(line, textvariable=var, width=width)
+        entry = RoundedEntry(line, textvariable=var, width=(max(120, width*10) if width else 260),
+                             bg=FIELD)
         entry.pack(side='left', fill='x', expand=True)
         if browse:
             self._button(line, 'Procurar', browse, padx=14, pady=8).pack(side='left', padx=(8, 0))
@@ -305,7 +307,7 @@ class Forge(tk.Tk):
         self._label(body, 'ESCOLHA ONDE SALVAR OS ARQUIVOS CONVERTIDOS', fg=ACCENT).pack(anchor='w', pady=(6, 5))
         destination_row = tk.Frame(body, bg=PANEL)
         destination_row.pack(fill='x', pady=(0, 7))
-        ttk.Entry(destination_row, textvariable=self.target).pack(side='left', fill='x', expand=True)
+        RoundedEntry(destination_row, textvariable=self.target, bg=FIELD).pack(side='left', fill='x', expand=True)
         self._button(destination_row, 'ESCOLHER PASTA', self._pick_target, accent=True,
                      padx=12, pady=8).pack(side='left', padx=(8, 0))
         self._button(destination_row, 'Abrir pasta', self._open_destination,
@@ -332,19 +334,20 @@ class Forge(tk.Tk):
         for index, (title, variable, default) in enumerate(settings):
             cell = tk.Frame(row, bg=PANEL)
             cell.pack(side='left', fill='x', expand=True, padx=(0 if index == 0 else 12, 0))
-            self._label(cell, title).pack(anchor='w', pady=(2, 5))
-            ttk.Entry(cell, textvariable=variable, width=12).pack(fill='x')
+            self._label(cell, title, anchor='center').pack(fill='x', pady=(2, 7))
+            RoundedEntry(cell, textvariable=variable, width=150, bg=FIELD).pack(fill='x')
         options = tk.Frame(body, bg=PANEL)
         options.pack(fill='x', pady=(13, 0))
         self._label(options, 'RESOLUÇÃO DAS TEXTURAS').pack(side='left', padx=(0, 12))
-        ttk.Combobox(options, textvariable=self.resolution, values=('512', '1024', '2048', '4096'),
-                     state='readonly', width=7).pack(side='left', padx=(0, 17))
+        RoundedSelect(options, textvariable=self.resolution,
+                      values=('512', '1024', '2048', '4096'), width=115, bg=FIELD).pack(side='left', padx=(0, 17))
         ttk.Checkbutton(options, text='Exportar também para CustomMiniPlugin (com mod)',
                         variable=self.plugin).pack(side='left')
         quality_line = tk.Frame(body, bg=PANEL)
         quality_line.pack(fill='x', pady=(13, 0))
         self._label(quality_line,'PERFIL DE QUALIDADE').pack(side='left',padx=(0,12))
-        combo=ttk.Combobox(quality_line, textvariable=self.quality, values=('Leve','Equilibrado','Alta','Ultra'),state='readonly',width=15)
+        combo=RoundedSelect(quality_line, textvariable=self.quality,
+                            values=('Leve','Equilibrado','Alta','Ultra'),width=150,bg=FIELD)
         combo.pack(side='left')
         combo.bind('<<ComboboxSelected>>', self._apply_quality)
         self._label(quality_line,'(preenche triângulos e resolução; você ainda pode personalizar)',fg=MUTED).pack(side='left',padx=12)
@@ -818,7 +821,8 @@ class Forge(tk.Tk):
                              scale_factor=self.scale_factor.get(),
                              auto_scale=self.auto_scale.get(), target_height=self.target_height.get(),
                              install_after_conversion=self.install_after.get(),
-                             tsmod_folder=self.tsmod_folder.get())
+                             tsmod_folder=self.tsmod_folder.get(),
+                             auto_update_check=self.auto_update_check.get())
         except OSError:
             pass
 
