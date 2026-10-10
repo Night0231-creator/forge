@@ -374,6 +374,8 @@ def try_preserve_png_albedo(obj, uv_name, output):
     image = texture.image
     if image is None or image.source != 'FILE':
         return None
+    if image.colorspace_settings.name != 'sRGB':
+        return None
     if not (0 < image.size[0] <= 2048 and 0 < image.size[1] <= 2048):
         return None
     # In case the source material deliberately uses UV transforms, bake the
