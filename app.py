@@ -680,15 +680,26 @@ class Forge(tk.Tk):
         self.quick_convert_btn.config(state='disabled')
         self.cancel_btn.config(state='normal')
         self.worker = threading.Thread(target=self._cmd_only_thread,
-            args=(exe, destination, height, scale_factor, auto_height), daemon=True)
+            args=(exe, destination, height, scale_factor, auto_height,
+                  self.tsmod_reference.get().strip()), daemon=True)
         self.worker.start()
 
-    def _cmd_only_thread(self, exe, folder, height, scale_factor, auto_height):
+    def _cmd_only_thread(self, exe, folder, height, scale_factor, auto_height, reference_tsmod=''):
         try:
             result = run_taleweavercmd(exe, folder, folder.name, height, preserve_params=True,
                 scale_factor=scale_factor, target_height=auto_height,
                 on_line=lambda line: self.log_events.put(('log', '[CMD] ' + line)),
                 on_process=lambda proc: setattr(self, 'process', proc))
+            if reference_tsmod:
+                try:
+                    comparison = compare_tsmod_reference(reference_tsmod, result)
+                    (folder / 'comparacao_tsmod_referencia.json').write_text(
+                        json.dumps(comparison, ensure_ascii=False, indent=2),
+                        encoding='utf-8')
+                    self.log_events.put(('log', '[REFERÊNCIA] ' +
+                        format_tsmod_reference_report(comparison).splitlines()[0]))
+                except (OSError, ValueError) as problem:
+                    self.log_events.put(('log', '[REFERÊNCIA] Comparação não disponível: ' + str(problem)))
             self.log_events.put(('success', str(folder), {'vertices': '—', 'triangles': '—'}, str(result)))
         except Exception as ex:
             self.log_events.put(('partial', str(folder), str(ex)))
