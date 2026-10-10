@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.10-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.11-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.10.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.11.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -115,3 +115,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Inclui opção para desativar o preset e botão para reaplicar os ajustes; botão +25% permite calibrar a altura conforme o resultado no TaleSpire.
 - A referência .tsMod Basecoat não informa uma altura confiável no cabeçalho: os valores são aproximados, não uma reprodução exata.
 - Para aplicar a correção, reimporte o **GLB original** do Meshy e faça a conversão completa; arquivos OBJ antigos já reduzidos não recuperam detalhes perdidos.
+
+## V2.2.11 — Preparar miniaturas para TaleWeaverLite/Unity
+
+- Novo botão para gerar um ZIP com malha OBJ de pivô nos pés, materiais, Albedo/Normal/MAES e FBX original alternativo.
+- Usa **Transform** para ajuste VISUAL no TaleWeaverLite e **Default Scale = 1** para escala inicial 1×1, conforme documentação oficial.
+- Inclui guia, estimativa de ancoragem e sugestão de visual 8× baseada apenas no teste do Eclipse Warlord (não é um padrão universal).
+- **Requer Unity 2021.3.45f2 + TaleWeaverLite gratuitos para finalizar .tsMod.** Não altera a geração automática existente pelo TaleWeaverCmd.
+- O modo é experimental, não altera a base física ou o colisor automaticamente e não promete eliminar o bug de movimentação.
+- [Manual do fluxo TaleWeaverLite](docs/V2_2_11_UNITY_HANDOFF.md).
