@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.13-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.14-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.13.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.14.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -142,3 +142,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Importar último modelo no Unity reutiliza uma conversão anterior.
 - O .tsMod ainda exige salvar manualmente no TaleWeaverLite; escala 1x1 e movimento precisam de validação no jogo.
 - [Manual da V2.2.13](docs/V2_2_13_UNITY_BRIDGE.md).
+
+
+## V2.2.14 — Calibrador visual 1×1
+
+- Na tela Início, **Calibrar 1×1** mostra a projeção do OBJ real ao lado de um quadrado 1×1 de referência geométrica e uma silhueta humana de 1,75 unidade.
+- Mede os limites reais do OBJ, mediana aproximada dos pés e largura do corpo sem tratar acessórios automaticamente como a base física.
+- Cada conversão registra `calibracao_visual_1x1.json` com medições e alertas de tamanho, sem alterar a malha original nem o `.tsMod`.
+- Referências não equivalem ao collider/Default Scale do TaleSpire: validação final no jogo continua necessária.
+- Editor de pintura de materiais fica para uma próxima versão. [Manual](docs/V2_2_14_VISUAL_CALIBRATOR.md).
