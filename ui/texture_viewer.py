@@ -37,6 +37,8 @@ class TexturedObjViewer(ObjViewer):
         self.pbr_gpu_enabled = True
         self.light_intensity = 1.0
         self.emission_intensity = 1.0
+        self.ambient_intensity = 1.0
+        self.environment_preset = 'Estúdio'
         self._backend_label = 'Prévia'
         self._texture_image = None
         self._preview_status = ''
@@ -49,7 +51,7 @@ class TexturedObjViewer(ObjViewer):
         super().__init__(parent, **kwargs)
         self.bind('<ButtonPress-3>', self._start_drag)
         self.bind('<B3-Motion>', self._pan)
-        self._poll_job = self.after(100, self._poll)
+        self._poll_job = self.after(33, self._poll)
 
     def open(self, file: Path):
         self._mesh = None
@@ -115,13 +117,21 @@ class TexturedObjViewer(ObjViewer):
             self._normal_map=np.asarray(normal,dtype=np.uint8).copy()
         self.render()
 
-    def set_lighting(self,*,light=None,emission=None,gpu=None):
+    def set_lighting(self,*,light=None,emission=None,gpu=None,
+                     ambient=None,environment=None):
         if light is not None:
             self.light_intensity=max(0.,min(4.,float(light)))
         if emission is not None:
             self.emission_intensity=max(0.,min(5.,float(emission)))
         if gpu is not None:
             self.pbr_gpu_enabled=bool(gpu)
+        if ambient is not None:
+            self.ambient_intensity=max(0.,min(3.,float(ambient)))
+        if environment is not None:
+            from .gpu_pbr_renderer import ENV_PRESETS
+            if environment not in ENV_PRESETS:
+                raise ValueError('Ambiente desconhecido')
+            self.environment_preset=environment
         self.render()
 
     def _project(self, xyz, width, height, center, units):
@@ -136,24 +146,36 @@ class TexturedObjViewer(ObjViewer):
         self.render()
 
     def render(self):
-        """Show responsive shaded geometry immediately, texture after idle."""
-        self._paint_ticket += 1
+        """Keep the last texture visible during brush and camera changes.
+
+        The original implementation repainted ~1600 Tk geometry polygons
+        on every mouse move, then replaced them with GPU output; this caused
+        flicker and main-thread stalls despite an accelerated GPU worker.
+        """
+        self._paint_ticket+=1
         if self._scheduled is not None:
-            try:
-                self.after_cancel(self._scheduled)
-            except tk.TclError:
-                pass
-            self._scheduled = None
-        super().render()
-        if self.display_mode == 'wireframe':
-            for item in self.find_all():
-                if self.type(item) == 'polygon':
-                    self.itemconfigure(item, fill='', outline='#997DD8', width=.6)
-        if self._preview_status and self.stats:
-            self.create_text(15,35,anchor='nw',text=self._preview_status,
-                             fill='#E6D7FF',font=('Segoe UI',9))
-        if self.display_mode == 'textured' and self._mesh is not None and self._albedo is not None:
-            self._scheduled = self.after(90 if self.pbr_gpu_enabled else 250, self._start_texture)
+            try: self.after_cancel(self._scheduled)
+            except tk.TclError: pass
+            self._scheduled=None
+        textured=(self.display_mode=='textured' and self._mesh is not None
+                  and self._albedo is not None)
+        if textured and self._texture_image is not None:
+            self.delete('all')
+            width,height=self.winfo_width(),self.winfo_height()
+            self.create_rectangle(0,0,width,height,fill='#111522',outline='')
+            self.create_image(width//2,height//2,image=self._texture_image)
+            self.create_text(12,max(height-15,1),anchor='sw',
+                             text=self._backend_label+' · prévia em atualização',
+                             fill='#D6CAE8',font=('Segoe UI',9))
+        else:
+            super().render()
+            if self.display_mode == 'wireframe':
+                for item in self.find_all():
+                    if self.type(item) == 'polygon':
+                        self.itemconfigure(item,fill='',outline='#997DD8',width=.6)
+        if textured:
+            self._scheduled=self.after(50 if self.pbr_gpu_enabled else 180,
+                                       self._start_texture)
 
     def _start_texture(self):
         self._scheduled = None
@@ -167,7 +189,7 @@ class TexturedObjViewer(ObjViewer):
         args=(self._mesh,self._albedo,self._maes,self._normal_map,
               self.yaw,self.pitch,self.zoom,width,height,self.pan_x,self.pan_y,
               self.compare_reference,self.light_intensity,self.emission_intensity,
-              not self.pbr_gpu_enabled)
+              not self.pbr_gpu_enabled,self.ambient_intensity,self.environment_preset)
         self._worker_busy = True
 
         def worker():
@@ -189,7 +211,7 @@ class TexturedObjViewer(ObjViewer):
                 if ticket != self._paint_ticket or self.display_mode != 'textured':
                     # A newer camera position wins. Do not display obsolete frames.
                     if self._scheduled is None and self.display_mode == 'textured':
-                        self._scheduled=self.after(100,self._start_texture)
+                        self._scheduled=self.after(40,self._start_texture)
                     continue
                 if error is not None:
                     self._preview_status='Falha na renderização: '+error[:100]
@@ -214,7 +236,7 @@ class TexturedObjViewer(ObjViewer):
             pass
         try:
             if self.winfo_exists():
-                self._poll_job=self.after(100,self._poll)
+                self._poll_job=self.after(33,self._poll)
         except tk.TclError:
             return
 
