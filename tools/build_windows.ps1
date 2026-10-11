@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
-Write-Host '=== ASTRONYX MINI FORGE STUDIO V2.3.0 ===' -ForegroundColor Magenta
+Write-Host '=== ASTRONYX MINI FORGE STUDIO V2.4.0 ===' -ForegroundColor Magenta
 $python = $null
 if (Get-Command py -ErrorAction SilentlyContinue) {
     & py -3 -c 'import sys; assert sys.version_info >= (3, 10)'
