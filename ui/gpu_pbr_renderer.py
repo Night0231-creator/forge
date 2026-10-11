@@ -50,6 +50,9 @@ uniform sampler2D u_normalmap;
 uniform int u_use_normal;
 uniform float u_light;
 uniform float u_emission;
+uniform float u_ambient;
+uniform vec3 u_sky_tint;
+uniform vec3 u_ground_tint;
 uniform vec3 u_light_dir;
 in vec2 v_uv;
 in vec3 v_normal;
@@ -93,8 +96,16 @@ void main() {
     vec3 F=F0+(1.0-F0)*pow(1.0-VdotH,5.0);
     vec3 spec=(D*Gv*Gl*F)/max(4.0*NdotL*NdotV,.001);
     vec3 diffuse=(1.0-metallic)*color/PI;
-    vec3 ambient=.29*color*max(.12,ao);
-    vec3 lit=ambient+(diffuse+spec)*NdotL*u_light*2.1;
+    // Lightweight hemispheric ambient lighting, not a real HDRI/IBL map.
+    float up=clamp(N.y*.5+.5,0.0,1.0);
+    vec3 hemisphere=mix(u_ground_tint,u_sky_tint,up);
+    vec3 env_diffuse=color*(1.0-metallic)*hemisphere;
+    vec3 env_reflect=F0*hemisphere*(1.0-roughness*.65);
+    vec3 ambient=(env_diffuse+env_reflect*.7)*u_ambient*max(.12,ao);
+    // Broad fill keeps backlit miniatures legible without a second shadow map.
+    float fill=max(dot(N,normalize(vec3(-.65,.25,-.34))),0.0);
+    vec3 lit=ambient+(diffuse+spec)*NdotL*u_light*2.1
+             +diffuse*hemisphere*fill*u_light*.22;
     // TaleSpire can condition emission on its own paint-wash settings.
     vec3 emitted=color*maes.b*u_emission;
     vec3 mapped=(lit+emitted)/(lit+emitted+vec3(1.0));
@@ -118,9 +129,20 @@ def _mesh_buffer(mesh) -> np.ndarray:
     return np.ascontiguousarray(joined.reshape(-1,8),dtype=np.float32)
 
 
-def _validate_settings(light: float, emission: float):
-    if not all(math.isfinite(v) for v in (light,emission)):
+ENV_PRESETS = {
+    'Estúdio': ((.77,.83,1.00),(.27,.24,.32)),
+    'Pôr do sol': ((1.00,.71,.46),(.39,.23,.34)),
+    'Luar': ((.40,.58,.96),(.12,.16,.32)),
+}
+
+def _validate_settings(light: float, emission: float, ambient: float = 1.0,
+                       environment: str = 'Estúdio'):
+    if not all(math.isfinite(v) for v in (light,emission,ambient)):
         raise ValueError('Iluminação inválida.')
+    if environment not in ENV_PRESETS:
+        raise ValueError('Ambiente de iluminação desconhecido.')
+    if not 0.0 <= ambient <= 3.0:
+        raise ValueError('Luz ambiente fora do intervalo permitido.')
     if not 0.0 <= light <= 4.0 or not 0.0 <= emission <= 5.0:
         raise ValueError('Iluminação fora do intervalo permitido.')
 
@@ -138,6 +160,8 @@ class GPUPreview:
         self.geometry=None
         self.vao=None
         self.tex_cache={}
+        self._neutral_maes=np.array([[[0,255,0,128]]],dtype=np.uint8)
+        self._neutral_normal=np.array([[[128,128,255]]],dtype=np.uint8)
         self.framebuffer=None
         self.frame_size=None
         self.render_calls=0
@@ -156,7 +180,7 @@ class GPUPreview:
         self.vao=self.ctx.vertex_array(
             self.program,[(self.geometry,'3f 2f 3f','in_position','in_uv','in_normal')])
         self.mesh_id=key
-        self.tex_cache.clear()
+        # Texture cache is independent of the geometry; keep GPU textures.
 
     def _texture(self,name,data,components):
         arr=np.asarray(data,dtype=np.uint8)
@@ -188,9 +212,10 @@ class GPUPreview:
         return self.framebuffer
 
     def render(self,mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
-               pan_x=0.,pan_y=0.,light=1.0,emission=1.0):
+               pan_x=0.,pan_y=0.,light=1.0,emission=1.0,
+               ambient=1.0,environment='Estúdio'):
         self._thread_check()
-        _validate_settings(light,emission)
+        _validate_settings(light,emission,ambient,environment)
         width=int(max(100,min(width,900)))
         height=int(max(100,min(height,900)))
         self._set_mesh(mesh)
@@ -210,6 +235,9 @@ class GPUPreview:
             'u_resolution':(float(width),float(height)),
             'u_center':tuple(float(v) for v in (lo+hi)*.5),
             'u_light':float(light),'u_emission':float(emission),
+            'u_ambient':float(ambient),
+            'u_sky_tint':ENV_PRESETS[environment][0],
+            'u_ground_tint':ENV_PRESETS[environment][1],
             'u_light_dir':(.35,.77,.53),
             'u_use_normal':int(normal_map is not None),
             'u_albedo':0,'u_maes':1,'u_normalmap':2,
@@ -218,12 +246,10 @@ class GPUPreview:
             self.program[name].value=value
         self._texture('albedo',albedo,3).use(location=0)
         if maes is None:
-            maes=np.zeros((1,1,4),dtype=np.uint8)
-            maes[:]=[0,255,0,128]
+            maes=self._neutral_maes
         self._texture('maes',maes,4).use(location=1)
         if normal_map is None:
-            normal_map=np.full((1,1,3),128,dtype=np.uint8)
-            normal_map[:,:,2]=255
+            normal_map=self._neutral_normal
         self._texture('normal',normal_map,3).use(location=2)
         self.vao.render(mode=self.gl.TRIANGLES)
         pixels=fbo.read(components=3,alignment=1)
@@ -236,9 +262,10 @@ _THREAD=threading.local()
 
 def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                    pan_x=0.,pan_y=0.,show_reference=False,light=1.0,
-                   emission=1.0,force_cpu=False):
+                   emission=1.0,force_cpu=False,ambient=1.0,
+                   environment='Estúdio'):
     """Render on worker only; automatically fallback on unsupported hardware."""
-    _validate_settings(float(light),float(emission))
+    _validate_settings(float(light),float(emission),float(ambient),environment)
     if not show_reference and not force_cpu:
         try:
             gpu=getattr(_THREAD,'gpu',None)
@@ -247,9 +274,9 @@ def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                 _THREAD.gpu=gpu
             if gpu is not None:
                 img=gpu.render(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,
-                               height,pan_x,pan_y,light,emission)
+                               height,pan_x,pan_y,light,emission,ambient,environment)
                 return img,'GPU OpenGL 3.3 · PBR (prévia)'
-        except (ImportError,RuntimeError,OSError,ValueError,Exception):
+        except Exception:
             # Prefer a visible CPU image to a crash/blank window, including in
             # remote desktop sessions where WGL context creation may fail.
             _THREAD.no_gpu=True
