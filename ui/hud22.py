@@ -50,54 +50,72 @@ def _card(parent,fill='x',**pack_opts):
 
 
 def dashboard(app):
+    """Essentials-first home: one import, one conversion button, clear progress."""
     shell=tk.Frame(app.tab_dashboard,bg=BG)
-    shell.pack(fill='both',expand=True,padx=18,pady=14)
+    shell.pack(fill='both',expand=True,padx=20,pady=13)
 
-    hero=_card(shell,pady=(0,15))
-    accent=tk.Frame(hero,bg=PURPLE,width=4)
-    accent.pack(side='left',fill='y')
+    hero=_card(shell,pady=(0,13))
     copy=tk.Frame(hero,bg=SURFACE)
-    copy.pack(side='left',fill='both',expand=True,padx=23,pady=20)
-    _label(copy,'ASTRONYX / MINIATURE WORKSPACE',fg=t.ACCENT_HOVER,size=9,bold=True).pack(anchor='w')
-    _label(copy,'Seu personagem. Sua aventura.',size=20,bold=True).pack(anchor='w',pady=(7,5))
-    _label(copy,'Importe um modelo, ajuste a escala e prepare sua miniatura para o TaleSpire.',
-           fg=MUTED,size=10,wraplength=570,justify='left').pack(anchor='w')
-    buttons=tk.Frame(copy,bg=SURFACE)
-    buttons.pack(anchor='w',pady=(15,0))
-    action(buttons,'+  Novo personagem',lambda:app._navigate('convert','tab_quick'),True).pack(side='left',padx=(0,9))
-    action(buttons,'Abrir Studio 3D  →',lambda:app._navigate('studio','tab_preview')).pack(side='left')
+    copy.pack(fill='x',padx=22,pady=16)
+    _label(copy,'ASTRONYX MINI FORGE',fg=t.ACCENT_HOVER,size=9,bold=True,
+           anchor='center').pack(fill='x')
+    _label(copy,'Do Meshy direto para o TaleSpire',size=20,bold=True,
+           anchor='center').pack(fill='x',pady=(5,5))
+    _label(copy,'Escolha um arquivo .GLB ou .ZIP do Meshy. O Mini Forge prepara o personagem no seu PC.',
+           fg=MUTED,size=10,wraplength=680,justify='center',
+           anchor='center').pack(fill='x')
 
-    stats=tk.Frame(shell,bg=BG)
-    stats.pack(fill='x',pady=(0,15))
-    app.hud_stats=[]
-    for label,icon in (('PROJETOS','◈'),('PRONTOS PARA USAR','✓'),('EM PREPARAÇÃO','⋯')):
-        outline=tk.Frame(stats,bg=t.BORDER)
-        outline.pack(side='left',fill='both',expand=True,padx=(0,9))
-        box=tk.Frame(outline,bg=SURFACE)
-        box.pack(fill='both',expand=True,padx=1,pady=1)
-        heading=tk.Frame(box,bg=SURFACE)
-        heading.pack(fill='x',padx=14,pady=(12,3))
-        _label(heading,label,fg=MUTED,size=9,bold=True).pack(side='left')
-        _label(heading,icon,fg=t.ACCENT_HOVER,size=14,bold=True).pack(side='right')
-        number=_label(box,'0',size=24,bold=True)
-        number.pack(anchor='w',padx=14,pady=(0,12))
-        app.hud_stats.append(number)
+    frame=tk.Frame(shell,bg=t.BORDER,padx=1,pady=1)
+    frame.pack(fill='x',pady=(0,13))
+    area=tk.Frame(frame,bg=SURFACE2,cursor='hand2')
+    area.pack(fill='x')
+    app.hud_drop_area=area
+    badge=_label(area,'⬇',bg=SURFACE2,fg=t.ACCENT_HOVER,size=24,bold=True,anchor='center')
+    badge.pack(fill='x',pady=(17,2))
+    heading=_label(area,'01  •  SOLTE SEU MODELO AQUI',bg=SURFACE2,
+                   size=12,bold=True,anchor='center')
+    heading.pack(fill='x')
+    app.hud_drop_filename=tk.StringVar(value='Nenhum arquivo selecionado')
+    filename=_label(area,'',bg=SURFACE2,fg=MUTED,size=10,
+                    textvariable=app.hud_drop_filename,anchor='center',
+                    wraplength=620,justify='center')
+    filename.pack(fill='x',padx=14,pady=(8,9))
+    buttons=tk.Frame(area,bg=SURFACE2)
+    buttons.pack(pady=(0,18))
+    choose=action(buttons,'Escolher GLB ou ZIP',app._pick_source,True)
+    choose.pack()
+    app.hud_drop_widgets=(area,badge,heading,filename)
+    for widget in app.hud_drop_widgets:
+        widget.bind('<Button-1>',lambda _event:app._pick_source(),add='+')
+
+    step=_card(shell,pady=(0,13))
+    line=tk.Frame(step,bg=SURFACE)
+    line.pack(fill='x',padx=18,pady=(13,8))
+    _label(line,'02  •  GERAR MINIATURA',size=11,bold=True).pack(side='left')
+    _label(line,'Processo local pelo Blender + TaleWeaverCmd',fg=MUTED,size=9).pack(side='right')
+    actions=tk.Frame(step,bg=SURFACE)
+    actions.pack(fill='x',padx=18,pady=(0,11))
+    app.hud_generate_button=action(actions,'GERAR .TSMOD',app._start_quick,True)
+    app.hud_generate_button.pack(side='left',padx=(0,9))
+    action(actions,'Abrir resultado',app._open_result).pack(side='left',padx=(0,9))
+    action(actions,'Mais opções',lambda:app._navigate('convert','tab_quick')).pack(side='left')
+    ttk.Progressbar(step,variable=app.progress,maximum=100,
+                    style='Astronyx.Horizontal.TProgressbar').pack(fill='x',padx=18,pady=(0,7))
+    _label(step,'',textvariable=app.message,fg=MUTED,size=9,
+           anchor='center',justify='center',wraplength=660).pack(fill='x',padx=18,pady=(0,14))
 
     row=tk.Frame(shell,bg=BG)
-    row.pack(fill='x',pady=(0,8))
-    _label(row,'Projetos recentes',bg=BG,size=15,bold=True).pack(side='left')
+    row.pack(fill='x',pady=(0,7))
+    _label(row,'Seus últimos personagens',bg=BG,size=12,bold=True).pack(side='left')
     t.hover_button(row,'Ver biblioteca →',lambda:app._navigate('library','tab_library'),
                    compact=True).pack(side='right')
     app.hud_recent=tk.Frame(shell,bg=BG)
     app.hud_recent.pack(fill='both',expand=True)
 
-    footer=tk.Frame(shell,bg=BG)
-    footer.pack(fill='x',pady=(12,0))
-    _label(footer,'●  PROCESSAMENTO LOCAL · seus arquivos ficam no seu PC',
-           bg=BG,fg=GREEN,size=9,bold=True).pack(side='left')
-    ttk.Progressbar(footer,variable=app.progress,maximum=100,
-                    style='Astronyx.Horizontal.TProgressbar',length=170).pack(side='right')
-
+    app.hud_stats=[]
+    app.hud_status_ready=_label(shell,'●  Processamento local: os modelos ficam no seu PC.',
+                                bg=BG,fg=GREEN,size=9,anchor='center')
+    app.hud_status_ready.pack(fill='x',pady=(5,0))
 
 def refresh_dashboard(app):
     if not hasattr(app,'hud_recent'):
