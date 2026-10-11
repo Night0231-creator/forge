@@ -16,13 +16,13 @@ if (-not $python) { throw 'Python 3.10+ necessario apenas neste PC de COMPILACAO
 $exe = $python[0]
 $argsPrefix = @()
 if ($python.Length -gt 1) { $argsPrefix = @($python[1]) }
-& $exe @argsPrefix -m pip install --upgrade pillow numpy
+& $exe @argsPrefix -m pip install --upgrade pillow numpy tkinterdnd2
 if ($LASTEXITCODE -ne 0) { throw 'Dependencias de visualizacao 3D nao puderam ser instaladas.' }
 & $exe @argsPrefix -m unittest discover -s tests -q
 if ($LASTEXITCODE -ne 0) { throw 'Os testes falharam: a compilacao foi interrompida.' }
 & $exe @argsPrefix -m pip install --upgrade pyinstaller
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller nao pode ser instalado.' }
-& $exe @argsPrefix -m PyInstaller --noconfirm --clean --noupx --onedir --contents-directory '_internal' --windowed --version-file 'installer\windows_version_info.txt' --name AstronyxMiniForgeStudio --icon 'assets\astronyx.ico' --add-data 'core\blender_pipeline.py;core' --add-data 'core\obj_vertex_budget.py;core' --add-data 'assets;assets' studio.py
+& $exe @argsPrefix -m PyInstaller --noconfirm --clean --noupx --collect-all tkinterdnd2 --onedir --contents-directory '_internal' --windowed --version-file 'installer\windows_version_info.txt' --name AstronyxMiniForgeStudio --icon 'assets\astronyx.ico' --add-data 'core\blender_pipeline.py;core' --add-data 'core\obj_vertex_budget.py;core' --add-data 'assets;assets' studio.py
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao compilar executavel.' }
 $bin = Join-Path $root 'dist\AstronyxMiniForgeStudio\AstronyxMiniForgeStudio.exe'
 if (-not (Test-Path (Join-Path $root 'dist\AstronyxMiniForgeStudio\_internal'))) { throw 'Runtime onedir _internal ausente.' }
