@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V4.2.0.
+"""Astronyx Mini Forge Studio V5.0.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -670,6 +670,15 @@ def run_packaged_selftest(report_file: str) -> int:
         result['checked']['surface_paint_packaged']=False
         result['surface_error']=str(exc)
     try:
+        from ui.realtime_viewer import RealtimeObjViewer
+        from pyopengltk import OpenGLFrame
+        from OpenGL import GL
+        result['checked']['native_viewport_packaged']=all(
+            value is not None for value in (RealtimeObjViewer,OpenGLFrame,GL.glViewport))
+    except Exception as exc:
+        result['checked']['native_viewport_packaged']=False
+        result['native_error']=str(exc)
+    try:
         tcl = tk.Tcl()
         result['tcl_version'] = str(tcl.eval('info patchlevel'))
         result['checked']['tcl'] = True
@@ -690,7 +699,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 4.2.0')
+            print('Astronyx Mini Forge Studio 5.0.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''

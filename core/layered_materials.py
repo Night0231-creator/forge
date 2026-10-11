@@ -93,6 +93,8 @@ class LayeredPaintSession(PaintSession):
                     raise ValueError('Textura MAES excede o limite de segurança.')
                 self.material_original = raw.convert('RGBA')
                 self.maes_image = self.material_original.copy()
+        from ui.realtime_policy import TextureDamage
+        self.preview_damage = TextureDamage(self.image.size)
         self.restored_layers = self._restore_layers()
         self._compose()
 
@@ -108,6 +110,7 @@ class LayeredPaintSession(PaintSession):
                 pixels.putalpha(alpha)
             result = Image.alpha_composite(result, pixels)
         self.image = result
+        self.preview_damage.mark()
 
     def _compose_region(self, box):
         """Recompose only dirty rectangle while brushing; no 4K full repaint per move."""
@@ -122,6 +125,7 @@ class LayeredPaintSession(PaintSession):
                 pixels.putalpha(alpha)
             result=Image.alpha_composite(result,pixels)
         self.image.paste(result,box)
+        self.preview_damage.mark(box)
 
     def _snapshot(self):
         return ([PaintLayer(layer.name, layer.pixels.copy(),

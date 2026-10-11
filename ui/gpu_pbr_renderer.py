@@ -150,12 +150,12 @@ def _validate_settings(light: float, emission: float, ambient: float = 1.0,
 
 class GPUPreview:
     """Private to one worker thread; reuse GL context, geometry and textures."""
-    def __init__(self):
+    def __init__(self, ctx=None, fragment_shader=None):
         import moderngl
         self.owner=threading.get_ident()
         self.gl=moderngl
-        self.ctx=moderngl.create_context(standalone=True,require=330)
-        self.program=self.ctx.program(vertex_shader=VS,fragment_shader=FS)
+        self.ctx=ctx if ctx is not None else moderngl.create_context(standalone=True,require=330)
+        self.program=self.ctx.program(vertex_shader=VS,fragment_shader=fragment_shader or FS)
         self.ctx.enable(moderngl.DEPTH_TEST)
         self.mesh_id=None
         self.geometry=None
@@ -181,6 +181,9 @@ class GPUPreview:
         self.vao=self.ctx.vertex_array(
             self.program,[(self.geometry,'3f 2f 3f','in_position','in_uv','in_normal')])
         self.mesh_id=key
+        lo,hi=mesh.points.min(axis=0),mesh.points.max(axis=0)
+        self.center=tuple(float(v) for v in (lo+hi)*.5)
+        self.extent=max(float((hi-lo).max()),1e-5)
         # Texture cache is independent of the geometry; keep GPU textures.
 
     def _texture(self,name,data,components):
@@ -212,29 +215,25 @@ class GPUPreview:
             self.frame_size=(width,height)
         return self.framebuffer
 
-    def render(self,mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
+    def render_to(self,target,mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                pan_x=0.,pan_y=0.,light=1.0,emission=1.0,
-               ambient=1.0,environment='Estúdio',canvas_size=None):
+               ambient=1.0,environment='Estúdio',clear=True):
         self._thread_check()
         _validate_settings(light,emission,ambient,environment)
-        width=int(max(100,min(width,900)))
-        height=int(max(100,min(height,900)))
+        width,height=max(1,int(width)),max(1,int(height))
         self._set_mesh(mesh)
-        points=mesh.points
-        lo=points.min(axis=0)
-        hi=points.max(axis=0)
-        extent=max(float((hi-lo).max()),1e-5)
+        extent=self.extent
         unit=min(width*.62,height*.74)/extent*zoom
-        fbo=self._fbo(width,height)
-        fbo.use()
-        self.ctx.viewport=(0,0,width,height)
-        fbo.clear(0.,0.,0.,0.,depth=1.0)
+        target.use()
+        self.ctx.enable(self.gl.DEPTH_TEST)
+        if clear:
+            target.clear(0.,0.,0.,0.,depth=1.0)
         props={
             'u_yaw':float(yaw),'u_pitch':float(pitch),
             'u_unit':float(unit),'u_depth_span':float(extent)*2.0,
             'u_pan':(float(pan_x),float(pan_y)),
             'u_resolution':(float(width),float(height)),
-            'u_center':tuple(float(v) for v in (lo+hi)*.5),
+            'u_center':self.center,
             'u_light':float(light),'u_emission':float(emission),
             'u_ambient':float(ambient),
             'u_sky_tint':ENV_PRESETS[environment][0],
@@ -253,10 +252,30 @@ class GPUPreview:
             normal_map=self._neutral_normal
         self._texture('normal',normal_map,3).use(location=2)
         self.vao.render(mode=self.gl.TRIANGLES)
-        pixels=fbo.read(components=4,alignment=1)
         self.render_calls+=1
+
+    def render(self,mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
+               pan_x=0.,pan_y=0.,light=1.0,emission=1.0,
+               ambient=1.0,environment='Estúdio',canvas_size=None):
+        width=int(max(100,min(width,900)))
+        height=int(max(100,min(height,900)))
+        fbo=self._fbo(width,height)
+        self.ctx.viewport=(0,0,width,height)
+        self.render_to(fbo,mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
+                       pan_x,pan_y,light,emission,ambient,environment)
+        pixels=fbo.read(components=4,alignment=1)
         model=Image.frombytes('RGBA',(width,height),pixels).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
         return Image.alpha_composite(studio_background(width,height,canvas_size).convert('RGBA'),model).convert('RGB')
+
+    def release(self):
+        for entry in self.tex_cache.values():
+            entry[1].release()
+        self.tex_cache.clear()
+        for name in ('vao','geometry','framebuffer','program'):
+            item=getattr(self,name,None)
+            if item is not None:
+                item.release()
+                setattr(self,name,None)
 
 
 _THREAD=threading.local()

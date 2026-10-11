@@ -15,13 +15,13 @@ class SurfacePaintingSourceTests(unittest.TestCase):
         self.assertIn('self._surface_pixel(event)',source)
         self.assertIn('self.session.checkpoint()',source)
         self.assertIn('self._schedule_preview()',source)
-        self.assertIn('self.viewer._albedo=np.asarray(image,dtype=np.uint8).copy()',source)
+        self.assertIn('self.viewer.update_paint(self.session.image,',source)
 
     def test_app_version_consistency(self):
         from core.version import APP_VERSION
-        self.assertEqual(APP_VERSION,'4.2.0')
+        self.assertEqual(APP_VERSION,'5.0.0')
         cli=(ROOT/'studio.py').read_text(encoding='utf-8')
-        self.assertIn('Astronyx Mini Forge Studio 4.2.0',cli)
+        self.assertIn('Astronyx Mini Forge Studio 5.0.0',cli)
 
 
 if __name__ == '__main__':

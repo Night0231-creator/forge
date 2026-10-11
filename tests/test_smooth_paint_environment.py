@@ -65,7 +65,7 @@ class SmoothPaintingTests(unittest.TestCase):
             ast.parse(source)
         self.assertIn('if textured and self._texture_image is not None:',viewer)
         self.assertIn('self._poll_job=self.after(33,self._poll)',viewer)
-        self.assertIn("self._preview_job=self.after(90,self._refresh_live_preview)",paint)
+        self.assertIn("self._preview_job=self.after(8,self._refresh_live_preview)",paint)
         self.assertIn("self._environment=tk.StringVar(value='Estúdio')",paint)
         self.assertIn('ambient=self._ambient_level.get()/100',paint)
         self.assertIn('self._neutral_maes',gpu)
