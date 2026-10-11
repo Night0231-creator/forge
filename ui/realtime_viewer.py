@@ -396,15 +396,27 @@ class RealtimeObjViewer(tk.Frame):
         self._selection_source=selection
         # Multiple paint events can arrive before one scheduled frame.
         self._damage=None if (damage is None or (self._paint_pending and self._damage is None)) else (
-            (self._damage or [])+list(damage))
+            sorted(set(tuple(box) for box in (self._damage or [])+list(damage))))
         self._paint_pending=True
         if self._using_fallback:
-            copy=image.convert('RGB')
-            copy.thumbnail((1024,1024),Image.Resampling.BILINEAR)
+            size=preview_size(image.size,1024)
+            base=getattr(self,'_fallback_base',None)
+            if self._damage is None or base is None or base.size!=size:
+                base=image.resize(size,Image.Resampling.BILINEAR).convert('RGB')
+                self._fallback_base=base
+            else:
+                for box in self._damage:
+                    mapped,data=texture_patch(image,size,box)
+                    base.paste(Image.fromarray(data),mapped)
+            copy=base
             if selection is not None:
                 tint=Image.blend(copy,Image.new('RGB',copy.size,'#81CFFC'),.22)
                 copy=Image.composite(tint,copy,selection.resize(copy.size,Image.Resampling.NEAREST))
+            # A worker may still be rendering the old array: publish a fresh
+            # bounded snapshot, never modify an array that it is reading.
             self._albedo=np.asarray(copy,dtype=np.uint8).copy()
+            self._paint_pending=False
+            self._damage=[]
         self.render()
 
     def _upload_paint(self,gpu):
@@ -462,12 +474,18 @@ class RealtimeObjViewer(tk.Frame):
 
     def set_brush_cursor(self,x,y,diameter):
         self.brush_cursor=(float(x),float(y),max(0.,float(diameter)*.5))
-        self.render()
+        if self._using_fallback:
+            self._fallback.set_brush_cursor(x,y,diameter)
+        else:
+            self.render()
 
     def clear_brush_cursor(self):
         if self.brush_cursor is not None:
             self.brush_cursor=None
-            self.render()
+            if self._using_fallback:
+                self._fallback.clear_brush_cursor()
+            else:
+                self.render()
 
     def _start_drag(self,event):
         self.last_mouse=(event.x,event.y)

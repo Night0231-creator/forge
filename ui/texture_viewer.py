@@ -51,6 +51,7 @@ class TexturedObjViewer(ObjViewer):
         self._events = queue.Queue()
         self._pool = ThreadPoolExecutor(max_workers=1,thread_name_prefix='AstronyxGPU')
         self._poll_job = None
+        self.brush_cursor = None
         super().__init__(parent, **kwargs)
         self.bind('<ButtonPress-3>', self._start_drag)
         self.bind('<B3-Motion>', self._pan)
@@ -157,12 +158,11 @@ class TexturedObjViewer(ObjViewer):
         flicker and main-thread stalls despite an accelerated GPU worker.
         """
         self._paint_ticket+=1
-        if self._scheduled is not None:
-            try: self.after_cancel(self._scheduled)
-            except tk.TclError: pass
-            self._scheduled=None
         textured=(self.display_mode=='textured' and self._mesh is not None
                   and self._albedo is not None)
+        if not textured and self._scheduled is not None:
+            self.after_cancel(self._scheduled)
+            self._scheduled=None
         if textured and self._texture_image is not None:
             self.delete('all')
             width,height=self.winfo_width(),self.winfo_height()
@@ -189,9 +189,31 @@ class TexturedObjViewer(ObjViewer):
                 for item in self.find_all():
                     if self.type(item) == 'polygon':
                         self.itemconfigure(item,fill='',outline='#997DD8',width=.6)
-        if textured:
+        self._draw_brush_cursor()
+        if textured and self._scheduled is None and not self._worker_busy:
             self._scheduled=self.after(50 if self.pbr_gpu_enabled else 180,
                                        self._start_texture)
+
+    def set_brush_cursor(self,x,y,diameter):
+        self.brush_cursor=(x,y,diameter*.5)
+        self._draw_brush_cursor()
+
+    def clear_brush_cursor(self):
+        self.brush_cursor=None
+        self.delete('brush-cursor')
+
+    def _draw_brush_cursor(self):
+        self.delete('brush-cursor')
+        if self.brush_cursor:
+            x,y,radius=self.brush_cursor
+            self.create_oval(x-radius,y-radius,x+radius,y+radius,
+                             outline='#B8D6FF',width=1,tags='brush-cursor')
+
+    def _camera_key(self):
+        return (id(self._mesh),self.winfo_width(),self.winfo_height(),
+                self.yaw,self.pitch,self.zoom,self.pan_x,self.pan_y,
+                self.compare_reference,self.light_intensity,self.emission_intensity,
+                self.ambient_intensity,self.environment_preset,self.pbr_gpu_enabled)
 
     def _draw_backdrop(self,width,height):
         if ImageTk is None:
@@ -209,6 +231,7 @@ class TexturedObjViewer(ObjViewer):
         if self._mesh is None or self._albedo is None:
             return
         ticket = self._paint_ticket
+        camera = self._camera_key()
         canvas_size=(self.winfo_width(),self.winfo_height())
         width = min(PREVIEW_LIMIT,max(160,canvas_size[0]))
         height = min(PREVIEW_LIMIT,max(160,canvas_size[1]))
@@ -221,9 +244,9 @@ class TexturedObjViewer(ObjViewer):
         def worker():
             try:
                 frame,status=render_preview(*args,canvas_size=canvas_size)
-                self._events.put((ticket,frame,status,None))
+                self._events.put((ticket,camera,frame,status,None))
             except Exception as exc:
-                self._events.put((ticket,None,None,str(exc)))
+                self._events.put((ticket,camera,None,None,str(exc)))
         try:
             self._pool.submit(worker)
         except RuntimeError:
@@ -232,9 +255,9 @@ class TexturedObjViewer(ObjViewer):
     def _poll(self):
         try:
             while True:
-                ticket,image,backend,error = self._events.get_nowait()
+                ticket,camera,image,backend,error = self._events.get_nowait()
                 self._worker_busy=False
-                if ticket != self._paint_ticket or self.display_mode != 'textured':
+                if camera != self._camera_key() or self.display_mode != 'textured':
                     # A newer camera position wins. Do not display obsolete frames.
                     if self._scheduled is None and self.display_mode == 'textured':
                         self._scheduled=self.after(40,self._start_texture)
@@ -258,6 +281,9 @@ class TexturedObjViewer(ObjViewer):
                                      text=(self._backend_label+' · Referência 1×1' if self.compare_reference
                                           else self._backend_label+' · botão direito: girar · roda: zoom'),
                                      fill='#9999A5',font=('Segoe UI',9))
+                    self._draw_brush_cursor()
+                    if ticket != self._paint_ticket and self._scheduled is None:
+                        self._scheduled=self.after(40,self._start_texture)
         except queue.Empty:
             pass
         try:

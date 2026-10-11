@@ -83,6 +83,8 @@ class ProjectedUVPicker:
         self.y=y[triangles]
         self.depth=depths[triangles]
         self.uv=uv
+        self.uv_area=((uv[:,1,0]-uv[:,0,0])*(uv[:,2,1]-uv[:,0,1])
+                      -(uv[:,1,1]-uv[:,0,1])*(uv[:,2,0]-uv[:,0,0]))
         self.area=((self.x[:,1]-self.x[:,0])*(self.y[:,2]-self.y[:,0])
                    -(self.y[:,1]-self.y[:,0])*(self.x[:,2]-self.x[:,0]))
         self.min_x=self.x.min(axis=1)

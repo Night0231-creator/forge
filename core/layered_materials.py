@@ -52,13 +52,33 @@ def _flood_mask(image: Image.Image, xy: tuple[int, int], tolerance: int) -> Imag
         raise ValueError('Clique dentro da textura.')
     if not isinstance(tolerance, int) or not 0 <= tolerance <= 60:
         raise ValueError('Tolerância deve ficar entre 0 e 60.')
-    before = image.convert('RGB')
-    after = before.copy()
-    seed = before.getpixel((x, y))
-    sentinel = tuple((value + 128) % 256 for value in seed)
-    ImageDraw.floodfill(after, (x, y), sentinel, thresh=tolerance)
-    differences = ImageChops.difference(before, after).convert('L')
-    return differences.point(lambda v: 255 if v else 0)
+    # Match Pillow's RGB Manhattan distance and four-connected region using
+    # scanlines. Its pixel-by-pixel Python floodfill takes seconds on 1K/4K.
+    rgb = np.asarray(image.convert('RGB'))
+    seed = rgb[y,x].astype(np.int16)
+    allowed = np.empty((image.height,image.width),dtype=bool)
+    for top in range(0,image.height,128):
+        part = rgb[top:top+128].astype(np.int16)
+        allowed[top:top+128] = np.abs(part-seed).sum(axis=-1)<=tolerance
+    result = np.zeros(allowed.shape,dtype=np.uint8)
+    pending = [(x,y)]
+    while pending:
+        sx,sy = pending.pop()
+        if not allowed[sy,sx]:
+            continue
+        row = allowed[sy]
+        before = np.flatnonzero(~row[:sx])
+        after = np.flatnonzero(~row[sx:])
+        left = int(before[-1]+1) if len(before) else 0
+        right = int(sx+after[0]) if len(after) else image.width
+        row[left:right] = False
+        result[sy,left:right] = 255
+        for neighbor in (sy-1,sy+1):
+            if 0<=neighbor<image.height:
+                span = allowed[neighbor,left:right]
+                starts = np.flatnonzero(span & np.r_[True,~span[:-1]])
+                pending.extend((int(left+start),neighbor) for start in starts)
+    return Image.fromarray(result)
 
 
 def find_maes(root: Path) -> Path | None:
@@ -276,9 +296,11 @@ class LayeredPaintSession(PaintSession):
             for top in range(y//tile_size*tile_size,y+mask.height,tile_size):
                 for left in range(x//tile_size*tile_size,x+mask.width,tile_size):
                     key=(left,top)
-                    tile=tiles.setdefault(key,Image.new('L',(
-                        min(tile_size,self.image.width-left),
-                        min(tile_size,self.image.height-top))))
+                    if key not in tiles:
+                        tiles[key]=Image.new('L',(
+                            min(tile_size,self.image.width-left),
+                            min(tile_size,self.image.height-top)))
+                    tile=tiles[key]
                     box=(max(x,left),max(y,top),
                          min(x+mask.width,left+tile.width),
                          min(y+mask.height,top+tile.height))

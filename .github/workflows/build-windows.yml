@@ -1,4 +1,4 @@
-name: Astronyx Mini Forge Studio 5.1.0 Windows (Win10/Win11)
+name: Astronyx Mini Forge Studio 5.1.1 Windows (Win10/Win11)
 on:
   pull_request:
     branches: [main]
@@ -33,6 +33,8 @@ jobs:
         run: python -X faulthandler -m unittest discover -s tests -v
       - name: Validar pintura na janela real e recuperacao de GPU
         run: python tools/validate_native_viewport.py --report dist/validation-native-window.json --screenshot dist/native-window.png
+      - name: Validar latencia de edicao com malha densa e textura 4K
+        run: python tools/validate_editing_latency.py --report dist/validation-editing.json
       - name: Conferir layout desktop na janela minima
         run: python tools/capture_studio_ui.py --example --width 1120 --height 720 --output dist/studio-layout-small.png
       - name: Instalar Inno Setup 6
@@ -53,7 +55,7 @@ jobs:
       - name: Gerar hashes SHA256
         shell: powershell
         run: |
-          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v5.1.0.exe', 'dist/AstronyxMiniForgeStudio-Portable-v5.1.0-Win10-Win11-x64.zip')
+          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v5.1.1.exe', 'dist/AstronyxMiniForgeStudio-Portable-v5.1.1-Win10-Win11-x64.zip')
           foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
@@ -66,6 +68,7 @@ jobs:
             dist/validation-installed-onedir.json
             dist/validation-installer.json
             dist/validation-native-window.json
+            dist/validation-editing.json
             dist/native-window.png
             dist/studio-layout-small.png
             dist/SHA256SUMS.txt
@@ -74,13 +77,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Portable-ZIP
-          path: dist/AstronyxMiniForgeStudio-Portable-v5.1.0-Win10-Win11-x64.zip
+          path: dist/AstronyxMiniForgeStudio-Portable-v5.1.1-Win10-Win11-x64.zip
           if-no-files-found: error
       - name: Enviar instalador
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Setup
-          path: dist/installer/AstronyxMiniForgeStudio-Setup-v5.1.0.exe
+          path: dist/installer/AstronyxMiniForgeStudio-Setup-v5.1.1.exe
           if-no-files-found: error
 
   native-render:
@@ -95,11 +98,14 @@ jobs:
           /tmp/forge-native/bin/python -m pip install pillow numpy moderngl glcontext pyopengltk==0.0.4 PyOpenGL==3.1.10
       - name: Validar GPU nativa, pintura e ociosidade com Mesa
         run: xvfb-run -a -s "-screen 0 1600x1000x24" /tmp/forge-native/bin/python tools/validate_native_viewport.py --require-native --report dist/native-render.json --screenshot dist/native-render.png
+      - name: Validar latencia durante pintura e selecao 4K
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" /tmp/forge-native/bin/python tools/validate_editing_latency.py --require-native --report dist/native-editing.json
       - uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Native-Render
           path: |
             dist/native-render.json
+            dist/native-editing.json
             dist/native-render.png
           if-no-files-found: error
 

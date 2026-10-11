@@ -80,6 +80,12 @@ class SurfacePaintTests(unittest.TestCase):
         self.assertGreater(alpha[130:,:120].sum(),0)
         self.assertGreater(alpha[:120,130:].sum(),0)
 
+    def test_front_geometry_with_degenerate_uv_still_occludes_back_face(self):
+        model=self.occluded()
+        model.texcoords[1]=0
+        alpha=self.paint(model,diameter=45)
+        self.assertEqual(alpha.sum(),0)
+
     def test_custom_square_stamp_keeps_corners_and_uv_seams(self):
         alpha=self.paint(split_plane(),diameter=60,stencil=Image.new('L',(32,32),255))
         self.assertGreater(alpha[:120,130:].sum(),0)
