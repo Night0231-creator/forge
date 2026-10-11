@@ -1,7 +1,7 @@
-"""Basecoat-inspired, independently designed Astronyx UV painting workbench.
+"""Independent Astronyx surface painting workbench with Albedo/MAES layers.
 
-Albedo layers and local MAES presets share the V2.3 3D UV brush.
-The 3D CPU preview shows Albedo only, not simulated metallic/emissive shading.
+Screen-projected surface brushes share the texture editor's layer/history model.
+GPU PBR preview is optional; CPU fallback shows Albedo.
 """
 from __future__ import annotations
 
@@ -13,6 +13,10 @@ from PIL import Image, ImageDraw, ImageTk
 import numpy as np
 
 from ui.paint3d_picker import ProjectedUVPicker
+from ui.surface_paint import surface_masks
+from core.brushes import stamp_mask
+from core.mesh_regions import MeshRegions
+from core.version import APP_VERSION
 
 from core.paint_studio import PALETTE, find_albedo
 from core.layered_materials import LayeredPaintSession, PRESETS, apply_materials_to_export
@@ -39,6 +43,13 @@ class PaintingStudio(tk.Frame):
         self.size = tk.IntVar(value=20)
         self.opacity = tk.IntVar(value=100)
         self.tolerance = tk.IntVar(value=12)
+        self.hardness = tk.IntVar(value=75)
+        self.paint_through = tk.BooleanVar(value=False)
+        self.region_mode = tk.StringVar(value='Geometria')
+        self.region_angle = tk.IntVar(value=35)
+        self._regions = None
+        self._region_mesh = None
+        self._current_hit = None
         self.stamp_name=tk.StringVar(value='Estrela')
         self.stamp_image=None
         self.show_uv = tk.BooleanVar(value=True)
@@ -59,6 +70,18 @@ class PaintingStudio(tk.Frame):
         if self.session.restored_layers:
             self.status.set('Camadas da pintura anterior restauradas. A textura MAES é exibida somente após exportar no jogo.')
 
+    def destroy(self):
+        """Cancel pending renders when a project closes or switches."""
+        for name in ('_refresh_id', '_preview_job'):
+            job = getattr(self, name, None)
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
+        super().destroy()
+
     @staticmethod
     def _label(parent, text, color=TEXT, size=10, bold=False, **kw):
         return tk.Label(parent,text=text,bg=parent.cget('bg'),fg=color,
@@ -77,7 +100,7 @@ class PaintingStudio(tk.Frame):
         sty=ttk.Style(self)
         sty.configure('PaintStudio.TNotebook',background=PANEL,borderwidth=0)
         sty.configure('PaintStudio.TNotebook.Tab',background=FIELD,foreground=TEXT,
-                      font=('Segoe UI',9,'bold'),padding=(11,9))
+                      font=('Segoe UI',9,'bold'),padding=(6,9))
         sty.map('PaintStudio.TNotebook.Tab',
                 background=[('selected',PURPLE)],foreground=[('selected','#FFFFFF')])
 
@@ -90,7 +113,7 @@ class PaintingStudio(tk.Frame):
             self._button(line,'← Projetos',self.on_exit).pack(side='left',padx=(0,14))
         self._label(line,'◈ ASTRONYX  /  PAINT STUDIO',color=TEXT,size=15,bold=True).pack(
             side='left',pady=13)
-        self._label(line,'ESTÚDIO 3D  ·  V4.0',color='#B89EFA',size=9,bold=True).pack(
+        self._label(line,f'ESTÚDIO 3D  ·  V{APP_VERSION}',color='#B89EFA',size=9,bold=True).pack(
             side='left',padx=14)
         self._button(line,'Exportar texturas',self._apply,highlight=True).pack(
             side='right',pady=10)
@@ -116,12 +139,11 @@ class PaintingStudio(tk.Frame):
         tools.grid_propagate(False)
         tabs=ttk.Notebook(tools,style='PaintStudio.TNotebook')
         tabs.pack(fill='both',expand=True,pady=5,padx=5)
-        right=tk.Frame(tabs,bg=PANEL)
-        layers_tab=tk.Frame(tabs,bg=PANEL)
-        materials_tab=tk.Frame(tabs,bg=PANEL)
-        tabs.add(right,text='Pincéis')
-        tabs.add(layers_tab,text='Camadas')
-        tabs.add(materials_tab,text='Materiais')
+        right=self._tool_tab(tabs,'Pintar')
+        layers_tab=self._tool_tab(tabs,'Camadas')
+        materials_tab=self._tool_tab(tabs,'Material')
+        options_tab=self._tool_tab(tabs,'Opções')
+        self._build_surface_options(options_tab)
         self._build_layers_tab(layers_tab)
         self._build_materials_tab(materials_tab)
         self._label(right,'PINTURA',bold=True,color='#BFA7FF').pack(
@@ -133,13 +155,6 @@ class PaintingStudio(tk.Frame):
                            bg=PANEL,fg=TEXT,selectcolor=FIELD,
                            activebackground=PANEL,activeforeground=TEXT,
                            anchor='w',font=('Segoe UI',10)).pack(fill='x',padx=11,pady=4)
-        self._label(right,'CARIMBOS',color=MUTED,size=9,bold=True).pack(
-            anchor='w',padx=12,pady=(10,5))
-        ttk.Combobox(right,values=('Estrela','Selo','Runa','PNG personalizado'),
-                     textvariable=self.stamp_name,state='readonly',
-                     width=20).pack(fill='x',padx=11,pady=(0,4))
-        self._button(right,'Carregar PNG…',self._load_custom_stamp).pack(
-            fill='x',padx=11,pady=(0,5))
         self._label(right,'TAMANHO',color=MUTED,size=9,bold=True).pack(
             anchor='w',padx=12,pady=(14,0))
         tk.Scale(right,from_=1,to=100,orient='horizontal',variable=self.size,
@@ -170,6 +185,8 @@ class PaintingStudio(tk.Frame):
         actions.pack(fill='x',padx=8,pady=(6,10))
         self._button(actions,'↶ Desfazer',self._undo).pack(side='left',padx=3)
         self._button(actions,'↷ Refazer',self._redo).pack(side='left',padx=3)
+        for button in actions.winfo_children():
+            button.configure(font=('Segoe UI',9),padx=5)
 
         # The 3D model now dominates the window instead of sharing space 50/50.
         viewport=tk.Frame(body,bg='#121626',highlightbackground='#303754',
@@ -308,7 +325,7 @@ class PaintingStudio(tk.Frame):
         opacity.bind('<ButtonRelease-1>',self._layer_opacity_change)
         self._label(tab,'As camadas são salvas como PNGs separados. '
                     'Mudar visibilidade não modifica o modelo original.',
-                    color=MUTED,wraplength=245).pack(anchor='w',padx=12,pady=13)
+                    color=MUTED,wraplength=206).pack(anchor='w',padx=12,pady=13)
         self._update_layers()
 
     def _update_layers(self):
@@ -367,32 +384,84 @@ class PaintingStudio(tk.Frame):
         self._request_refresh()
         self._schedule_preview()
 
+    def _tool_tab(self,tabs,title):
+        """Keep every tool reachable on smaller Windows displays."""
+        page=tk.Frame(tabs,bg=PANEL)
+        tabs.add(page,text=title)
+        scroll=ttk.Scrollbar(page,orient='vertical')
+        scroll.pack(side='right',fill='y')
+        canvas=tk.Canvas(page,bg=PANEL,highlightthickness=0,
+                         yscrollcommand=scroll.set,width=200)
+        canvas.pack(fill='both',expand=True)
+        scroll.configure(command=canvas.yview)
+        content=tk.Frame(canvas,bg=PANEL)
+        item=canvas.create_window(0,0,anchor='nw',window=content)
+        content.bind('<Configure>',lambda _e:canvas.configure(scrollregion=canvas.bbox('all')))
+        canvas.bind('<Configure>',lambda e:canvas.itemconfigure(item,width=e.width))
+        canvas.bind('<MouseWheel>',lambda e:canvas.yview_scroll(-int(e.delta/120),'units'))
+        return content
+
+    def _build_surface_options(self,tab):
+        self._label(tab,'PINCEL DE SUPERFÍCIE',bold=True,color='#BFA7FF').pack(
+            anchor='w',padx=12,pady=(14,8))
+        self._label(tab,'Dureza da borda',color=MUTED).pack(anchor='w',padx=12)
+        tk.Scale(tab,from_=0,to=100,orient='horizontal',variable=self.hardness,
+                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(fill='x',padx=9)
+        tk.Checkbutton(tab,text='Pintar através do modelo',variable=self.paint_through,
+                       bg=PANEL,fg=TEXT,selectcolor=FIELD,
+                       activebackground=PANEL,activeforeground=TEXT).pack(anchor='w',padx=9,pady=5)
+        self._label(tab,'No 3D, tamanho em pixels da tela. Girar o modelo permite '
+                    'pintar outros lados. Pintar através inclui as superfícies ocultas.',
+                    color=MUTED,wraplength=206,size=9).pack(anchor='w',padx=12,pady=(2,12))
+        self._label(tab,'SELEÇÃO E PREENCHIMENTO',bold=True,size=9).pack(anchor='w',padx=12)
+        ttk.Combobox(tab,values=('Geometria','Cor similar'),
+                     textvariable=self.region_mode,state='readonly',width=20).pack(fill='x',padx=11,pady=8)
+        self._label(tab,'Limite de ângulo entre faces',color=MUTED,size=9).pack(anchor='w',padx=12)
+        tk.Scale(tab,from_=0,to=180,orient='horizontal',variable=self.region_angle,
+                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(fill='x',padx=9)
+        self._label(tab,'Ângulos menores separam bordas. A geometria funciona mesmo '
+                    'sem cores; o mapa UV usa a seleção por cor.',
+                    color=MUTED,wraplength=206,size=9).pack(anchor='w',padx=12,pady=(2,12))
+        self._button(tab,'Limpar seleção',self._clear_region).pack(fill='x',padx=11,pady=4)
+        self._label(tab,'CARIMBOS',color=MUTED,size=9,bold=True).pack(anchor='w',padx=12,pady=(14,5))
+        ttk.Combobox(tab,values=('Estrela','Selo','Runa','PNG personalizado'),
+                     textvariable=self.stamp_name,state='readonly',width=20).pack(fill='x',padx=11,pady=4)
+        self._button(tab,'Carregar PNG…',self._load_custom_stamp).pack(fill='x',padx=11,pady=4)
+
     def _build_materials_tab(self,tab):
         self._label(tab,'MATERIAIS TALESPIRE',bold=True).pack(anchor='w',padx=12,pady=(14,5))
         self.material_name=tk.StringVar(value=list(PRESETS)[0])
         menu=ttk.Combobox(tab,values=list(PRESETS),textvariable=self.material_name,
                           state='readonly',width=22)
         menu.pack(fill='x',padx=10,pady=(3,12))
+        self._material_channels = [tk.IntVar(value=value) for value in PRESETS[self.material_name.get()]]
+        for title,variable in zip(('Metal','Oclusão ambiente','Emissão','Suavidade'),self._material_channels):
+            self._label(tab,title,color=MUTED,size=9).pack(anchor='w',padx=12)
+            tk.Scale(tab,from_=0,to=255,orient='horizontal',variable=variable,
+                     bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(fill='x',padx=9)
+        menu.bind('<<ComboboxSelected>>',self._material_preset_selected)
         self._button(tab,'Aplicar na região',self._apply_material,highlight=True).pack(fill='x',padx=10)
         self._button(tab,'Limpar seleção',self._clear_region).pack(fill='x',padx=10,pady=(8,0))
         self._label(tab,'PASSOS',bold=True).pack(anchor='w',padx=12,pady=(20,5))
-        self._label(tab,'1. Na aba Pincéis selecione “Selecionar região similar”. '
+        self._label(tab,'1. Na aba Pintar escolha “Selecionar região”. '
                     '2. Clique em uma área do 3D ou da textura. '
                     '3. Volte aqui e aplique um material.',
-                    color=MUTED,wraplength=240).pack(anchor='w',padx=12)
+                    color=MUTED,wraplength=206).pack(anchor='w',padx=12)
         availability=('MAES detectada' if self.session.maes_image is not None
                       else 'MAES ausente: converta o modelo primeiro')
         self._label(tab,availability,color=GREEN if self.session.maes_image is not None
-                    else MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(16,0))
-        self._label(tab,'Canais MAES: Vermelho=Metal, Verde=AO, Azul=Emissão, Alfa=Suavidade. '
-                    'A prévia GPU simula metal, emissão e luz ambiente. '
-                    'Escolha Estúdio, Pôr do sol ou Luar no painel 3D. '
-                    'A aparência real no TaleSpire pode ser diferente.',
-                    color=MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(14,0))
+                    else MUTED,wraplength=206).pack(anchor='w',padx=12,pady=(16,0))
+        self._label(tab,'A prévia GPU simula o material. Confira o resultado '
+                    'no TaleSpire após exportar.',color=MUTED,
+                    wraplength=206,size=9).pack(anchor='w',padx=12,pady=(14,0))
+
+    def _material_preset_selected(self,_event=None):
+        for variable,value in zip(self._material_channels,PRESETS[self.material_name.get()]):
+            variable.set(value)
 
     def _apply_material(self):
         try:
-            self.session.apply_material(self.material_name.get())
+            self.session.apply_material_values(tuple(int(v.get()) for v in self._material_channels))
             self.viewer.set_materials(self.session.maes_image)
             self.status.set('Material '+self.material_name.get()+
                 ' aplicado à região. Salve e reexporte para conferir no TaleSpire.')
@@ -402,6 +471,7 @@ class PaintingStudio(tk.Frame):
     def _clear_region(self):
         self.session.clear_region()
         self._request_refresh()
+        self._schedule_preview()
         self.status.set('Seleção de região removida.')
 
     def _pick_region(self,point):
@@ -409,6 +479,20 @@ class PaintingStudio(tk.Frame):
         self.status.set('Região conectada selecionada para pintura e materiais.'
                         if active else 'Nenhuma região selecionada.')
         self._request_refresh()
+        self._schedule_preview()
+
+    def _pick_surface_region(self,hit):
+        if self.region_mode.get()=='Cor similar':
+            self._pick_region(hit.pixel(*self.session.image.size))
+            return
+        if self._regions is None or self._region_mesh is not self.viewer._mesh:
+            self._regions=MeshRegions(self.viewer._mesh)
+            self._region_mesh=self.viewer._mesh
+        faces=self._regions.region(hit.triangle,self.region_angle.get())
+        self.session.selection=self._regions.mask(faces,self.session.image.size)
+        self.status.set(f'Região geométrica: {len(faces)} faces. Ajuste o ângulo em Opções.')
+        self._request_refresh()
+        self._schedule_preview()
 
     def _set_color(self,value):
         self.color.set(value)
@@ -476,7 +560,8 @@ class PaintingStudio(tk.Frame):
                 return
         else:
             self.session.stroke(p,p,self.color.get(),self.size.get(),
-                                self.opacity.get()/100,erase=(mode=='borracha'))
+                                self.opacity.get()/100,erase=(mode=='borracha'),
+                                hardness=self.hardness.get()/100)
         self._last=p if mode in ('pincel','borracha') else None
         self._request_refresh()
         self._schedule_preview()
@@ -485,7 +570,8 @@ class PaintingStudio(tk.Frame):
         point=self._coords(event)
         if point is None or self._last is None: return
         self.session.stroke(self._last,point,self.color.get(),self.size.get(),
-                            self.opacity.get()/100,erase=self.mode.get()=='borracha')
+                            self.opacity.get()/100,erase=self.mode.get()=='borracha',
+                            hardness=self.hardness.get()/100)
         self._last=point
         self._request_refresh()
         self._schedule_preview()
@@ -541,6 +627,7 @@ class PaintingStudio(tk.Frame):
     def _surface_pixel(self,event):
         picker=self._picker_for_camera()
         hit=picker.hit(event.x,event.y) if picker is not None else None
+        self._current_hit=hit
         if hit is None:
             return None
         return hit.pixel(*self.session.image.size)
@@ -563,20 +650,49 @@ class PaintingStudio(tk.Frame):
             self._set_color(self.session.pick(*point))
             return
         if mode=='regiao':
-            self._pick_region(point)
+            try:
+                self._pick_surface_region(self._current_hit)
+            except ValueError as exc:
+                self.status.set(str(exc))
             return
         self.session.checkpoint()
-        if mode=='balde':
-            self.session.bucket(*point,self.color.get(),self.tolerance.get())
-        elif mode=='carimbo':
-            if not self._stamp_at(point):
-                return
-        else:
-            self.session.stroke(point,point,self.color.get(),self.size.get(),
-                                self.opacity.get()/100,erase=(mode=='borracha'))
-            self._last_3d=point
+        screen=(event.x,event.y)
+        try:
+            if mode=='balde':
+                if self.region_mode.get()=='Geometria' and self.session.selection is None:
+                    self._pick_surface_region(self._current_hit)
+                self.session.bucket(*point,self.color.get(),self.tolerance.get())
+            elif mode=='carimbo':
+                custom=self.stamp_name.get()=='PNG personalizado'
+                if custom and self.stamp_image is None:
+                    self.status.set('Carregue um PNG na aba Opções antes de carimbar.')
+                    return
+                stencil=stamp_mask(128,self.stamp_name.get(),self.stamp_image if custom else None)
+                self._paint_surface(screen,screen,stencil=stencil)
+            else:
+                self._paint_surface(screen,screen,erase=(mode=='borracha'))
+                self._last_3d=screen
+        except ValueError as exc:
+            self.status.set(str(exc))
+            return
         self._request_refresh()
         self._schedule_preview()
+
+    def _paint_surface(self,start,end,erase=False,stencil=None):
+        picker=self._picker_for_camera()
+        if picker is None:
+            return
+        distance=math.hypot(end[0]-start[0],end[1]-start[1])
+        segments=max(1,math.ceil(distance/150))
+        patches=[]
+        for i in range(segments):
+            a=tuple(start[j]+(end[j]-start[j])*i/segments for j in (0,1))
+            b=tuple(start[j]+(end[j]-start[j])*(i+1)/segments for j in (0,1))
+            patches.extend(surface_masks(picker,a,b,self.session.image.size,
+                diameter=max(4,self.size.get()*2) if stencil is not None else self.size.get(),
+                hardness=self.hardness.get()/100,
+                paint_through=self.paint_through.get(),stencil=stencil))
+        self.session.apply_surface_masks(patches,self.color.get(),self.opacity.get()/100,erase)
 
     def _paint3d_drag(self,event):
         if not self.paint3d_enabled.get():
@@ -584,18 +700,14 @@ class PaintingStudio(tk.Frame):
             return
         if self.mode.get() not in ('pincel','borracha') or self._last_3d is None:
             return
-        point=self._surface_pixel(event)
-        if point is None:
+        screen=(event.x,event.y)
+        try:
+            self._paint_surface(self._last_3d,screen,erase=self.mode.get()=='borracha')
+            self._last_3d=screen
+        except ValueError as exc:
+            self.status.set(str(exc))
             self._last_3d=None
             return
-        prev=self._last_3d
-        # Do not draw long artificial lines across UV seams or disjoint islands.
-        threshold=max(self.size.get()*4,int(min(self.session.image.size)*.04))
-        linked=((point[0]-prev[0])**2+(point[1]-prev[1])**2) <= threshold**2
-        self.session.stroke(prev if linked else point,point,self.color.get(),
-                            self.size.get(),self.opacity.get()/100,
-                            erase=self.mode.get()=='borracha')
-        self._last_3d=point
         self._request_refresh()
         self._schedule_preview()
 
@@ -614,6 +726,10 @@ class PaintingStudio(tk.Frame):
             return
         image=self.session.image.convert('RGB')
         image.thumbnail((1024,1024),Image.Resampling.BILINEAR)
+        if self.session.selection is not None:
+            selection=self.session.selection.resize(image.size,Image.Resampling.NEAREST)
+            tint=Image.blend(image,Image.new('RGB',image.size,'#81CFFC'),.22)
+            image=Image.composite(tint,image,selection)
         self.viewer._albedo=np.asarray(image,dtype=np.uint8).copy()
         # The MAES map changes only when a material preset is applied,
         # not on every albedo brush stroke. Avoid repeated 1024px copies.
@@ -624,12 +740,14 @@ class PaintingStudio(tk.Frame):
             self._update_layers()
             self._request_refresh()
             self._schedule_preview()
+            self.viewer.set_materials(self.session.maes_image)
 
     def _redo(self):
         if self.session.redo():
             self._update_layers()
             self._request_refresh()
             self._schedule_preview()
+            self.viewer.set_materials(self.session.maes_image)
 
     def _save(self):
         try:
@@ -697,7 +815,7 @@ def _uv_edges(project: Path, max_lines: int = 3500):
 def open_painting_studio(parent,project: str | Path,on_apply=None):
     """Open as a complete studio window; embedded mode uses PaintingStudio directly."""
     window=tk.Toplevel(parent)
-    window.title('Astronyx • Painting Studio V3.0')
+    window.title(f'Astronyx • Painting Studio V{APP_VERSION}')
     window.configure(bg=BG)
     window.geometry('1440x880')
     window.minsize(1100,690)

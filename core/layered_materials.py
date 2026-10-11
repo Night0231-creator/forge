@@ -14,8 +14,10 @@ from pathlib import Path
 import shutil
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageOps
+import numpy as np
 
 from .paint_studio import PaintSession, MAX_PIXELS, _project, _write_png
+from .brushes import coverage, segment_distance, stamp_mask
 
 PRESETS = {
     'Aço escovado': (210, 235, 0, 175),
@@ -238,7 +240,7 @@ class LayeredPaintSession(PaintSession):
 
     def stroke(self, start: tuple[int,int], end: tuple[int,int],
                color: str, size: int = 18, opacity: float = 1.,
-               erase: bool = False):
+               erase: bool = False, hardness: float = 1.):
         if not isinstance(size,int) or not 1 <= size <= 256:
             raise ValueError('Pincel deve ter tamanho 1–256.')
         radius = max(1,size//2)
@@ -250,14 +252,37 @@ class LayeredPaintSession(PaintSession):
         bottom=min(self.image.height,max(y0,y1)+radius+3)
         if right <= left or bottom <= top:
             return
-        mask=Image.new('L',(right-left,bottom-top),0)
-        brush=ImageDraw.Draw(mask)
-        a=(x0-left,y0-top)
-        b=(x1-left,y1-top)
-        brush.line((a,b),fill=255,width=size)
-        for cx,cy in (a,b):
-            brush.ellipse((cx-radius,cy-radius,cx+radius,cy+radius),fill=255)
+        gx,gy=np.meshgrid(np.arange(left,right),np.arange(top,bottom))
+        mask=Image.fromarray(np.rint(255*coverage(
+            segment_distance(gx,gy,start,end),radius,hardness)).astype(np.uint8))
         self._apply_mask(mask,(left,top),color,opacity,erase)
+
+    def apply_surface_masks(self, patches, color: str, opacity: float = 1.,
+                            erase: bool = False):
+        """Merge face patches by maximum coverage before painting atlas tiles.
+
+        Adjacent triangles share boundary texels: applying independently would
+        double opacity there. Tiles also avoid recomposing a full 4K atlas.
+        """
+        tiles = {}
+        tile_size = 128
+        for mask,(x,y) in patches:
+            if mask.mode != 'L' or x < 0 or y < 0 or x+mask.width > self.image.width or y+mask.height > self.image.height:
+                raise ValueError('Máscara de superfície fora da textura.')
+            for top in range(y//tile_size*tile_size,y+mask.height,tile_size):
+                for left in range(x//tile_size*tile_size,x+mask.width,tile_size):
+                    key=(left,top)
+                    tile=tiles.setdefault(key,Image.new('L',(
+                        min(tile_size,self.image.width-left),
+                        min(tile_size,self.image.height-top))))
+                    box=(max(x,left),max(y,top),
+                         min(x+mask.width,left+tile.width),
+                         min(y+mask.height,top+tile.height))
+                    target=(box[0]-left,box[1]-top,box[2]-left,box[3]-top)
+                    source=(box[0]-x,box[1]-y,box[2]-x,box[3]-y)
+                    tile.paste(ImageChops.lighter(tile.crop(target),mask.crop(source)),target)
+        for origin,mask in tiles.items():
+            self._apply_mask(mask,origin,color,opacity,erase)
 
     def stamp(self, x: int, y: int, color: str, diameter: int = 48,
               opacity: float = 1.0, shape: str = 'Estrela',
@@ -271,37 +296,7 @@ class LayeredPaintSession(PaintSession):
             raise ValueError('Carimbo deve ter tamanho entre 4 e 512.')
         if not (0 <= x < self.image.width and 0 <= y < self.image.height):
             return
-        if custom is not None:
-            if custom.width*custom.height > 1024*1024:
-                raise ValueError('Imagem de carimbo muito grande.')
-            mask=custom.convert('RGBA').getchannel('A').resize(
-                (diameter,diameter),Image.Resampling.LANCZOS)
-        else:
-            mask=Image.new('L',(diameter,diameter),0)
-            draw=ImageDraw.Draw(mask)
-            m=diameter/2
-            if shape=='Estrela':
-                points=[]
-                for i in range(10):
-                    angle=-math.pi/2+i*math.pi/5
-                    radius=.46*diameter if i%2==0 else .21*diameter
-                    points.append((m+math.cos(angle)*radius,
-                                   m+math.sin(angle)*radius))
-                draw.polygon(points,fill=255)
-            elif shape=='Selo':
-                draw.ellipse((2,2,diameter-3,diameter-3),outline=255,
-                             width=max(2,diameter//12))
-                draw.ellipse((diameter*.28,diameter*.28,
-                              diameter*.72,diameter*.72),fill=255)
-            elif shape=='Runa':
-                w=max(2,diameter//12)
-                draw.line((m,diameter*.08,m,diameter*.92),fill=255,width=w)
-                draw.line((diameter*.25,diameter*.22,m,diameter*.48,
-                           diameter*.75,diameter*.22),fill=255,width=w)
-                draw.line((diameter*.25,diameter*.75,m,diameter*.48,
-                           diameter*.75,diameter*.75),fill=255,width=w)
-            else:
-                raise ValueError('Forma de carimbo desconhecida.')
+        mask=stamp_mask(diameter,shape,custom)
         left=x-diameter//2
         top=y-diameter//2
         right=left+diameter
@@ -323,6 +318,12 @@ class LayeredPaintSession(PaintSession):
         """Modify MAES *data* channels ONLY within an explicit selected region."""
         if name not in PRESETS:
             raise ValueError('Material desconhecido.')
+        self.apply_material_values(PRESETS[name])
+
+    def apply_material_values(self, values):
+        """Apply configurable metallic/AO/emissive/smoothness data, with undo."""
+        if len(values) != 4 or any(not isinstance(v,int) or not 0 <= v <= 255 for v in values):
+            raise ValueError('Canais do material devem ficar entre 0 e 255.')
         if self.maes_image is None:
             raise FileNotFoundError('Nenhum MAES.png encontrado. Converta a miniatura antes.')
         if self.selection is None or not self.selection.getbbox():
@@ -331,7 +332,7 @@ class LayeredPaintSession(PaintSession):
         coverage = self.selection
         if coverage.size != self.maes_image.size:
             coverage = coverage.resize(self.maes_image.size,Image.Resampling.NEAREST)
-        value=Image.new('RGBA',self.maes_image.size,PRESETS[name])
+        value=Image.new('RGBA',self.maes_image.size,tuple(values))
         self.maes_image=Image.composite(value,self.maes_image,coverage)
         self.maes_dirty = True
 

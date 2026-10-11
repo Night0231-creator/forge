@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v4.0.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v4.1.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v4.0.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v4.1.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -225,3 +225,12 @@ A interface principal do executável foi redesenhada para colocar **pintura, pro
 - O editor mantém backups dos Albedos/MAES antes de exportar e não altera arquivos .tsMod automaticamente; gere novamente o .tsMod pelo conversor após editar a pintura.
 - Este é um produto independente inspirado na usabilidade do Basecoat, **não uma réplica do software**. Ainda faltam automação de remesh/unwrap com bake de normais, iluminação HDRI real, pincel UV com simetria avançada, regiões semânticas e outros recursos. A visualização GPU depende do driver OpenGL 3.3+.
 - [Guia V4.0](docs/V4_0_MINIATURE_STUDIO.md).
+
+
+## V4.1.0 — Pintura de superfície e regiões geométricas
+
+- Pincel e carimbos projetados sobre a superfície, atravessando costuras UV.
+- Dureza ajustável, proteção das faces ocultas e pintura através opcional.
+- Regiões conectadas da geometria com ângulo ajustável e preenchimento para modelos sem cores.
+- Materiais personalizados, seleção realçada no 3D e ferramentas com rolagem.
+- Mantém preparação, backups e reexportação TaleSpire. [Guia e limites](docs/V4_1_SURFACE_PAINT.md).
