@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from .size_reference import paint_reference
+from .studio_scene import studio_background
 
 MAX_TRIANGLES = 150000
 MAX_TEXTURE_PIXELS = 4096 * 4096
@@ -111,15 +112,15 @@ def read_albedo(path: Path, max_side: int = 1024) -> np.ndarray:
 def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
          zoom: float, width: int, height: int, pan_x: float = 0,
          pan_y: float = 0, wire: bool = False,
-         show_reference: bool = False, reference_height: float = 1.75) -> Image.Image:
+         show_reference: bool = False, reference_height: float = 1.75,
+         canvas_size: tuple[int,int] | None = None) -> Image.Image:
     """CPU preview: orthographic barycentric UV, nearest sampling, Z buffer.
 
     Returns Pillow image. UI layer displays it through ImageTk on the Tk thread.
     """
     width = int(max(100, min(width, 900)))
     height = int(max(100, min(height, 900)))
-    rgb = np.empty((height, width, 3), dtype=np.uint8)
-    rgb[:] = (17, 21, 34)
+    rgb = np.asarray(studio_background(width, height,canvas_size)).copy()
     depth = np.full((height, width), -np.inf, dtype=np.float32)
 
     points = mesh.points.astype(np.float64, copy=False)
@@ -208,7 +209,8 @@ def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
 def draw_fast(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
               zoom: float, width: int, height: int, pan_x: float = 0,
               pan_y: float = 0, show_reference: bool = False,
-              reference_height: float = 1.75) -> Image.Image:
+              reference_height: float = 1.75,
+              canvas_size: tuple[int,int] | None = None) -> Image.Image:
     """Fast coloured CPU fallback for complex OBJ files.
 
     Painter-sort triangles, rasterize with Pillow's native polygon implementation
@@ -258,7 +260,7 @@ def draw_fast(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
              &(triangle_xy[:,:,0].min(axis=1)<=width)
              &(triangle_xy[:,:,1].max(axis=1)>=0)
              &(triangle_xy[:,:,1].min(axis=1)<=height))
-    frame=Image.new('RGB',(width,height),(24,28,42))
+    frame=studio_background(width,height,canvas_size)
     painter=ImageDraw.Draw(frame)
     palette=[tuple(int(v) for v in px) for px in colors]
     for i in order:

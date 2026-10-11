@@ -9,17 +9,17 @@ from tkinter import ttk
 
 from .rounded import RoundedButton
 
-BG = '#0C0F1A'
-SIDEBAR = '#101321'
-PANEL = '#191D2E'
-RAISED = '#252A40'
-BORDER = '#343953'
-TEXT = '#F3F4FC'
-MUTED = '#A8AEC4'
-SUBTLE = '#7E88A6'
-ACCENT = '#8859EA'
-ACCENT_HOVER = '#A077FF'
-ACCENT_SOFT = '#302449'
+BG = '#111115'
+SIDEBAR = '#141418'
+PANEL = '#1B1B21'
+RAISED = '#29292F'
+BORDER = '#36363E'
+TEXT = '#E3E3E8'
+MUTED = '#A2A2AE'
+SUBTLE = '#83838F'
+ACCENT = '#1976C5'
+ACCENT_HOVER = '#258AD8'
+ACCENT_SOFT = '#173449'
 GREEN = '#71DBB3'
 YELLOW = '#F3CB84'
 
@@ -51,6 +51,7 @@ def apply_studio_style(root):
                     padding=(10, 8), font=('Segoe UI', 10))
     style.configure('Astronyx.TCombobox', foreground=TEXT, fieldbackground=RAISED,
                     background=RAISED, bordercolor=BORDER, arrowcolor=TEXT,
+                    lightcolor=RAISED,darkcolor=RAISED,
                     selectbackground=ACCENT_SOFT, selectforeground=TEXT,
                     padding=7, font=('Segoe UI', 10))
     style.map('Astronyx.TCombobox',
