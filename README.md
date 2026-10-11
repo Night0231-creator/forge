@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.15-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.3.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.15.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.3.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -160,3 +160,13 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - O `.tsMod` anterior não é alterado: use **Gerar .tsMod de uma pasta já preparada** para incluir a nova textura.
 - A prévia 3D permanece somente visual; pintura diretamente na malha 3D será etapa posterior.
 - [Guia do Painting Studio](docs/V2_2_15_PAINTING_STUDIO.md).
+
+
+## V2.3.0 — Pintura direta na superfície 3D
+
+- Painting Studio agora aceita pinceladas no **modelo 3D visível**: clique sobre uma face, encontre a coordenada UV pela interpolação baricêntrica e edite o Albedo da miniatura.
+- Botão esquerdo: pintar, direito: girar, roda: zoom. A opção de desligar pintura 3D devolve o giro ao botão esquerdo.
+- Pincel, balde, conta-gotas e restaurar original disponíveis sobre o modelo; prévia da textura é atualizada periodicamente durante a pintura.
+- Desfazer/refazer, rascunho e backups continuam; o .tsMod precisa ser gerado novamente para refletir as alterações.
+- A seleção é calculada por CPU e é limitada às faces renderizadas do OBJ. Não é aceleração por GPU nem pintura PBR.
+- [Guia V2.3](docs/V2_3_3D_PAINT.md).

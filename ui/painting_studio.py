@@ -10,6 +10,9 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import colorchooser, messagebox, ttk
 from PIL import Image, ImageDraw, ImageTk
+import numpy as np
+
+from ui.paint3d_picker import ProjectedUVPicker
 
 from core.paint_studio import PaintSession, PALETTE, find_albedo, apply_paint_to_export
 from core.footprint_calibrator import find_project_obj
@@ -46,6 +49,12 @@ class PaintingStudio(tk.Toplevel):
         self._refresh_id = None
         self._photo = None
         self._view = (0,0,1.)
+        self._uv_outline = _uv_edges(self.project)
+        self.paint3d_enabled = tk.BooleanVar(value=True)
+        self._last_3d = None
+        self._picker_state = None
+        self._picker = None
+        self._preview_job = None
         self._make_ui()
         self._render_texture()
 
@@ -66,22 +75,34 @@ class PaintingStudio(tk.Toplevel):
         top=tk.Frame(self,bg=BG)
         top.pack(fill='x',padx=18,pady=(14,10))
         self._label(top,'ASTRONYX / PAINTING STUDIO',size=19,bold=True).pack(side='left')
-        self._label(top,'Pintura UV • prévia 3D • exportação TaleSpire',
+        self._label(top,'Pintura 3D por UV • prévia CPU • exportação TaleSpire',
                     color=MUTED).pack(side='right')
 
         body=tk.Frame(self,bg=BG)
         body.pack(fill='both',expand=True,padx=16)
         left=tk.Frame(body,bg=PANEL,width=390)
         left.pack(side='left',fill='both',expand=True,padx=(0,10))
-        self._label(left,'VISUALIZAÇÃO 3D',bold=True).pack(anchor='w',padx=12,pady=10)
+        self._label(left,'PINTURA DIRETA NO 3D',bold=True).pack(anchor='w',padx=12,pady=10)
         self.viewer = TexturedObjViewer(left,width=390,height=540)
+        self.viewer.compare_reference = False
         self.viewer.pack(fill='both',expand=True,padx=8)
         try:
             self.viewer.open(find_project_obj(self.project))
         except (ValueError, OSError) as exc:
             self._label(left,str(exc),color=MUTED,wraplength=370).pack(padx=12)
-        self._label(left,'Gire e aproxime. A prévia recebe as alterações ao aplicar.',
-                    color=MUTED,wraplength=370).pack(anchor='w',padx=12,pady=(6,12))
+        self.viewer.bind('<ButtonPress-1>',self._paint3d_start)
+        self.viewer.bind('<B1-Motion>',self._paint3d_drag)
+        self.viewer.bind('<ButtonRelease-1>',self._paint3d_end)
+        # With 3D paint active the right mouse button rotates the miniature.
+        self.viewer.bind('<ButtonPress-3>',self.viewer._start_drag)
+        self.viewer.bind('<B3-Motion>',self.viewer._drag)
+        self.viewer.bind('<ButtonRelease-3>',lambda _e:setattr(self.viewer,'last_mouse',None))
+        tk.Checkbutton(left,text='Pintar diretamente no modelo 3D',
+                       variable=self.paint3d_enabled,bg=PANEL,fg=TEXT,selectcolor=FIELD,
+                       activebackground=PANEL,activeforeground=TEXT).pack(anchor='w',padx=12,pady=(6,2))
+        self._label(left,'Esquerdo: pintar ou selecionar cor • direito: girar • roda: zoom. '
+                    'Desmarque para usar o botão esquerdo para girar.',
+                    color=MUTED,wraplength=370).pack(anchor='w',padx=12,pady=(0,12))
 
         center=tk.Frame(body,bg=PANEL,width=590)
         center.pack(side='left',fill='both',expand=True,padx=(0,10))
@@ -200,7 +221,7 @@ class PaintingStudio(tk.Toplevel):
         if self.show_uv.get():
             # Overlay is preview-only, never written to the painted PNG.
             uv=ImageDraw.Draw(image)
-            for a,b in _uv_edges(self.project):
+            for a,b in self._uv_outline:
                 uv.line((a[0]*width,(1-a[1])*height,
                          b[0]*width,(1-b[1])*height),fill='#4BEBE4',width=1)
         self._photo=ImageTk.PhotoImage(image,master=self)
@@ -208,11 +229,104 @@ class PaintingStudio(tk.Toplevel):
         self.canvas.create_image(x0,y0,anchor='nw',image=self._photo)
         self.canvas.create_rectangle(x0,y0,x0+width,y0+height,outline='#A88BFF')
 
+    def _picker_for_camera(self):
+        model=self.viewer._mesh
+        if model is None:
+            return None
+        state=(id(model), self.viewer.winfo_width(), self.viewer.winfo_height(),
+               self.viewer.yaw, self.viewer.pitch, self.viewer.zoom,
+               self.viewer.pan_x, self.viewer.pan_y, self.viewer.compare_reference)
+        if self._picker is None or self._picker_state != state:
+            self._picker=ProjectedUVPicker(
+                model,yaw=self.viewer.yaw,pitch=self.viewer.pitch,zoom=self.viewer.zoom,
+                canvas_width=self.viewer.winfo_width(),canvas_height=self.viewer.winfo_height(),
+                pan_x=self.viewer.pan_x,pan_y=self.viewer.pan_y,
+                show_reference=self.viewer.compare_reference)
+            self._picker_state=state
+        return self._picker
+
+    def _surface_pixel(self,event):
+        picker=self._picker_for_camera()
+        hit=picker.hit(event.x,event.y) if picker is not None else None
+        if hit is None:
+            return None
+        return hit.pixel(*self.session.image.size)
+
+    def _paint3d_start(self,event):
+        self._last_3d=None
+        if not self.paint3d_enabled.get():
+            self.viewer._start_drag(event)
+            return
+        try:
+            point=self._surface_pixel(event)
+        except ValueError as exc:
+            self.status.set(str(exc))
+            return
+        if point is None:
+            self.status.set('Clique sobre uma parte visível do personagem.')
+            return
+        mode=self.mode.get()
+        if mode=='conta-gotas':
+            self._set_color(self.session.pick(*point))
+            return
+        self.session.checkpoint()
+        if mode=='balde':
+            self.session.bucket(*point,self.color.get(),self.tolerance.get())
+        else:
+            self.session.stroke(point,point,self.color.get(),self.size.get(),
+                                self.opacity.get()/100,erase=(mode=='borracha'))
+            self._last_3d=point
+        self._request_refresh()
+        self._schedule_preview()
+
+    def _paint3d_drag(self,event):
+        if not self.paint3d_enabled.get():
+            self.viewer._drag(event)
+            return
+        if self.mode.get() not in ('pincel','borracha') or self._last_3d is None:
+            return
+        point=self._surface_pixel(event)
+        if point is None:
+            self._last_3d=None
+            return
+        prev=self._last_3d
+        # Do not draw long artificial lines across UV seams or disjoint islands.
+        threshold=max(self.size.get()*4,int(min(self.session.image.size)*.04))
+        linked=((point[0]-prev[0])**2+(point[1]-prev[1])**2) <= threshold**2
+        self.session.stroke(prev if linked else point,point,self.color.get(),
+                            self.size.get(),self.opacity.get()/100,
+                            erase=self.mode.get()=='borracha')
+        self._last_3d=point
+        self._request_refresh()
+        self._schedule_preview()
+
+    def _paint3d_end(self,_event):
+        self._last_3d=None
+        self.viewer.last_mouse=None
+        self._schedule_preview()
+
+    def _schedule_preview(self):
+        if self._preview_job is None:
+            self._preview_job=self.after(280,self._refresh_live_preview)
+
+    def _refresh_live_preview(self):
+        self._preview_job=None
+        if not self.winfo_exists() or self.viewer._mesh is None:
+            return
+        image=self.session.image.convert('RGB')
+        image.thumbnail((1024,1024),Image.Resampling.BILINEAR)
+        self.viewer._albedo=np.asarray(image,dtype=np.uint8).copy()
+        self.viewer.render()
+
     def _undo(self):
-        if self.session.undo(): self._request_refresh()
+        if self.session.undo():
+            self._request_refresh()
+            self._schedule_preview()
 
     def _redo(self):
-        if self.session.redo(): self._request_refresh()
+        if self.session.redo():
+            self._request_refresh()
+            self._schedule_preview()
 
     def _save(self):
         try:
