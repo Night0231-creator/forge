@@ -43,15 +43,15 @@ from core.preferences import load_preferences, open_output_folder, save_preferen
 from core.taleweavercmd import find_taleweavercmd, nearby_readme, run_taleweavercmd
 
 BASE = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
-ACCENT = '#A673FF'
-ACCENT2 = '#6F44CF'
-BG = '#0B0D15'
-PANEL = '#151827'
-FIELD = '#23263A'
-FG = '#F1F2FC'
-MUTED = '#A2A5BF'
-BORDER = '#34364E'
-GREEN = '#4DE0B3'
+ACCENT = '#258AD8'
+ACCENT2 = '#1976C5'
+BG = '#111115'
+PANEL = '#17171C'
+FIELD = '#29292F'
+FG = '#E3E3E8'
+MUTED = '#A2A2AE'
+BORDER = '#36363E'
+GREEN = '#79BF9C'
 
 
 def user_config_file() -> Path:

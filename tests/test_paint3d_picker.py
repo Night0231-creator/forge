@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 from ui.paint3d_picker import ProjectedUVPicker
+from ui.texture_renderer import draw
 
 
 class Mesh:
@@ -53,9 +54,13 @@ class ProjectedPickerTests(unittest.TestCase):
         pick=ProjectedUVPicker(model,yaw=0,pitch=0,zoom=1,
                                canvas_width=1000,canvas_height=1000,
                                pan_x=31,pan_y=-19,show_reference=False)
-        # Renderer uses a 720px image, centered within the larger canvas.
-        px=pick.offset_x + 720*.5+31
-        py=pick.offset_y + 720*.55-19
+        albedo=np.full((8,8,3),(240,20,10),dtype=np.uint8)
+        frame=draw(model,albedo,0,0,1,1000,1000,31,-19)
+        # Derive the click from the actual renderer, including its image cap.
+        px=(1000-frame.width)*.5+frame.width*.5+31
+        py=(1000-frame.height)*.5+frame.height*.55-19
+        self.assertGreater(frame.getpixel((round(frame.width*.5+31),
+                                          round(frame.height*.55-19)))[0],100)
         hit=pick.hit(px,py)
         self.assertIsNotNone(hit)
         self.assertAlmostEqual(hit.u,.5,places=4)

@@ -27,14 +27,14 @@ class PreviewIntegrationTests(unittest.TestCase):
     def test_paint_materials_update_gpu_and_cpu_switch(self):
         source=(ROOT/'ui/painting_studio.py').read_text(encoding='utf-8')
         ast.parse(source)
-        self.assertIn("text='GPU / PBR'",source)
+        self.assertIn("('Usar prévia GPU',self._pbr_on,self._apply_lighting)",source)
         self.assertIn('self.viewer.set_materials(self.session.maes_image)',source)
         self.assertIn('self.viewer.set_lighting(',source)
         self.assertIn('self.session.apply_material_values(',source)
 
     def test_version_and_windows_bundles(self):
         from core.version import APP_VERSION
-        self.assertEqual(APP_VERSION,'4.1.0')
+        self.assertEqual(APP_VERSION,'4.2.0')
         for name in ('build_windows.ps1','build_portable_windows.ps1'):
             content=(ROOT/'tools'/name).read_text(encoding='utf-8')
             self.assertIn('--collect-all moderngl',content)

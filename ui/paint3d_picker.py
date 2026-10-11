@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import math
 
 import numpy as np
+from .studio_scene import PREVIEW_LIMIT
 
 
 @dataclass(frozen=True)
@@ -46,8 +47,8 @@ class ProjectedUVPicker:
                 and zoom > 0 and reference_height > 0):
             raise ValueError('Câmera inválida para pintura 3D.')
         self.canvas_width, self.canvas_height = canvas_width, canvas_height
-        self.image_width = min(720,max(160,canvas_width))
-        self.image_height = min(720,max(160,canvas_height))
+        self.image_width = min(PREVIEW_LIMIT,max(160,canvas_width))
+        self.image_height = min(PREVIEW_LIMIT,max(160,canvas_height))
         self.offset_x=(canvas_width-self.image_width)*0.5
         self.offset_y=(canvas_height-self.image_height)*0.5
 

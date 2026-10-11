@@ -7,21 +7,20 @@ from __future__ import annotations
 
 from pathlib import Path
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 from core.footprint_calibrator import find_project_obj
 from core.paint_studio import find_albedo
 from ui.painting_studio import PaintingStudio
 
-BG='#0C1019'
-SURFACE='#141B29'
-SIDEBAR='#121825'
-RAISED='#252B3C'
-FG='#EDF0F9'
-MUTED='#A0ABC1'
-PURPLE='#9775F4'
-GREEN='#6DE3B5'
-BORDER='#30394E'
+from ui.paint_widgets import BG, PANEL, FIELD, TEXT, MUTED, ACCENT, BORDER
+
+SURFACE=PANEL
+SIDEBAR=PANEL
+RAISED=FIELD
+FG=TEXT
+PURPLE=ACCENT
+GREEN='#79BF9C'
 
 
 class UnifiedStudio(tk.Frame):
@@ -42,46 +41,54 @@ class UnifiedStudio(tk.Frame):
 
     def _button(self,parent,title,command,accent=False):
         return tk.Button(parent,text=title,command=command,
-                         bg=PURPLE if accent else RAISED,fg=FG,relief='flat',
-                         activebackground='#7153C5',activeforeground=FG,
-                         padx=13,pady=9,cursor='hand2',font=('Segoe UI',10,'bold'))
+                         bg=PURPLE if accent else RAISED,fg=FG,relief='flat',bd=0,highlightthickness=0,
+                         activebackground='#258AD8',activeforeground=FG,
+                         padx=10,pady=5,cursor='hand2',font=('Segoe UI',9))
 
     def _make_shell(self):
-        toolbar=tk.Frame(self,bg=SURFACE,height=61)
-        toolbar.pack(fill='x',padx=4,pady=(4,6))
+        toolbar=tk.Frame(self,bg=SURFACE,height=35)
+        toolbar.pack(fill='x')
         toolbar.pack_propagate(False)
-        self._text(toolbar,'◈  ASTRONYX  /  MINIATURE STUDIO',size=14,
-                   bold=True,color='#C9B4FF').pack(side='left',padx=15,pady=15)
-        self._button(toolbar,'Importar GLB / ZIP',self._create_new,accent=True).pack(
-            side='right',padx=(5,12),pady=10)
-        self._button(toolbar,'Exportar .tsMod',self._export_tsmod).pack(
-            side='right',padx=5,pady=10)
-        self._button(toolbar,'Instalar no TaleSpire',self._install_current).pack(
-            side='right',padx=5,pady=10)
+        self._text(toolbar,'ASTRONYX',size=10,bold=True).pack(side='left',padx=(12,15))
+        file_menu=self._menu(toolbar,'Arquivo')
+        file_menu.add_command(label='Importar modelo…',command=self._create_new)
+        file_menu.add_command(label='Salvar pintura',command=lambda:self._editor_action('_save'))
+        file_menu.add_separator()
+        file_menu.add_command(label='Projetos',command=self._toggle_projects)
+        file_menu.add_command(label='Galeria completa',command=lambda:self.app._navigate('library','tab_library'))
+        file_menu.add_command(label='Atualizar lista',command=self._refresh_external)
+        prepare=self._menu(toolbar,'Preparar')
+        prepare.add_command(label='Importar / converter',command=self._create_new)
+        prepare.add_command(label='Ajustes de escala e malha',command=lambda:self.app._navigate('scale','tab_conv'))
+        export=self._menu(toolbar,'Exportar')
+        export.add_command(label='Texturas pintadas',command=lambda:self._editor_action('_apply'))
+        export.add_command(label='Arquivo .tsMod',command=self._export_tsmod)
+        export.add_command(label='Instalar no TaleSpire',command=self._install_current)
+        help_menu=self._menu(toolbar,'Ajuda')
+        help_menu.add_command(label='Documentação',command=lambda:self.app._navigate('help','tab_guide'))
+        help_menu.add_command(label='Verificar atualizações',command=lambda:self.app._check_updates(True))
+        self._button(toolbar,'+ Importar',self._create_new,accent=True).pack(
+            side='right',padx=(8,10),pady=4)
+        self.project_choice=ttk.Combobox(toolbar,state='readonly',width=25,
+                                        style='Astronyx.TCombobox')
+        self.project_choice.set('Selecionar miniatura')
+        self.project_choice.pack(side='right',padx=5,pady=3)
+        self.project_choice.bind('<<ComboboxSelected>>',self._choice_select)
         body=tk.Frame(self,bg=BG)
-        body.pack(fill='both',expand=True,padx=4,pady=(0,5))
-
-        rail=tk.Frame(body,bg=SIDEBAR,width=198,highlightbackground=BORDER,
-                      highlightthickness=1)
-        rail.pack(side='left',fill='y',padx=(0,5))
-        rail.pack_propagate(False)
-        self._text(rail,'MINIATURAS',bold=True,color='#C9B4FF').pack(
-            anchor='w',padx=12,pady=(17,6))
-        self._text(rail,'Seus projetos Meshy',size=9,color=MUTED).pack(
-            anchor='w',padx=12,pady=(0,12))
-        self.project_list=tk.Listbox(rail,bg='#1F2636',fg=FG,
-                                     selectbackground='#6C55BC',
-                                     selectforeground='white',relief='flat',
-                                     highlightthickness=0,activestyle='none',
+        body.pack(fill='both',expand=True)
+        self.project_rail=tk.Frame(body,bg=SIDEBAR,width=190,
+                                   highlightbackground=BORDER,highlightthickness=1)
+        self.project_rail.pack_propagate(False)
+        self._text(self.project_rail,'Miniaturas',bold=True).pack(anchor='w',padx=12,pady=(12,8))
+        self.project_list=tk.Listbox(self.project_rail,bg=BG,fg=FG,
+                                     selectbackground=ACCENT,selectforeground='white',
+                                     relief='flat',highlightthickness=0,activestyle='none',
                                      exportselection=False,font=('Segoe UI',10))
-        self.project_list.pack(fill='both',expand=True,padx=8,pady=(0,11))
+        self.project_list.pack(fill='both',expand=True,padx=8,pady=(0,8))
         self.project_list.bind('<<ListboxSelect>>',self._list_select)
-        self._button(rail,'+ Importar modelo',self._create_new).pack(
-            fill='x',padx=8,pady=(0,6))
-        self._button(rail,'↻ Atualizar',self._refresh_external).pack(
-            fill='x',padx=8,pady=(0,6))
-        self._button(rail,'Galeria completa',lambda:self.app._navigate(
-            'library','tab_library')).pack(fill='x',padx=8,pady=(0,13))
+        self._button(self.project_rail,'+ Importar modelo',self._create_new).pack(fill='x',padx=8,pady=4)
+        self._button(self.project_rail,'Atualizar lista',self._refresh_external).pack(fill='x',padx=8,pady=4)
+        self._button(self.project_rail,'Recolher painel',self._toggle_projects).pack(fill='x',padx=8,pady=(4,10))
         self.workarea=tk.Frame(body,bg=BG)
         self.workarea.pack(side='left',fill='both',expand=True)
         self.home=tk.Frame(self.workarea,bg=BG)
@@ -89,6 +96,36 @@ class UnifiedStudio(tk.Frame):
         self.editor_frame=tk.Frame(self.workarea,bg=BG)
         self.editor_frame.pack(fill='both',expand=True)
         self.editor_frame.pack_forget()
+
+    def _menu(self,parent,title):
+        button=tk.Menubutton(parent,text=title,bg=SURFACE,fg=FG,
+                             activebackground=FIELD,activeforeground=FG,
+                             relief='flat',font=('Segoe UI',9),padx=9,pady=5)
+        button.pack(side='left')
+        menu=tk.Menu(button,tearoff=False,bg=PANEL,fg=FG,
+                     activebackground=ACCENT,activeforeground='white',
+                     relief='flat',bd=0,font=('Segoe UI',9))
+        button.configure(menu=menu)
+        return menu
+
+    def _editor_action(self,name):
+        if self.workspace_editor is None:
+            messagebox.showinfo('Selecione uma miniatura','Importe ou abra uma miniatura para pintar.',parent=self)
+            return
+        getattr(self.workspace_editor,name)()
+
+    def _toggle_projects(self):
+        if self.project_rail.winfo_manager():
+            self.project_rail.pack_forget()
+        else:
+            self.project_rail.pack(side='left',fill='y',before=self.workarea,padx=(0,5))
+
+    def _choice_select(self,_event=None):
+        index=self.project_choice.current()
+        if 0<=index<len(self.projects):
+            item=self.projects[index]
+            if self.current is None or item.folder!=self.current.folder:
+                self._select_project(item)
 
     def _create_new(self):
         self.app._navigate('quick','tab_dashboard')
@@ -116,8 +153,8 @@ class UnifiedStudio(tk.Frame):
         panel.pack(fill='both',expand=True)
         card=tk.Frame(panel,bg=SURFACE)
         card.place(relx=.5,rely=.43,anchor='center')
-        self._text(card,'✦',size=42,bold=True,color=PURPLE).pack()
-        self._text(card,'Crie sua próxima miniatura',size=22,bold=True).pack(pady=(5,6))
+        self._text(card,'◈',size=32,color=PURPLE).pack()
+        self._text(card,'Seu estúdio de miniaturas',size=22,bold=True).pack(pady=(5,6))
         self._text(card,'Importe um modelo Meshy, pinte diretamente no 3D\n'
                    'e prepare a exportação para o TaleSpire.',
                    size=11,color=MUTED,justify='center').pack(pady=(5,20))
@@ -139,6 +176,7 @@ class UnifiedStudio(tk.Frame):
         self.project_list.delete(0,tk.END)
         for item in self.projects:
             self.project_list.insert(tk.END,item.name.replace('_',' ')[:27])
+        self.project_choice.configure(values=[item.name.replace('_',' ') for item in self.projects])
         self._select_guard=False
         if self.workspace_editor is not None:
             # Keep unsaved active paint intact across filesystem/library refresh.
@@ -164,6 +202,7 @@ class UnifiedStudio(tk.Frame):
             if self.current and item.folder==self.current.folder:
                 self.project_list.selection_set(i)
                 self.project_list.see(i)
+                self.project_choice.current(i)
                 break
         self._select_guard=False
 

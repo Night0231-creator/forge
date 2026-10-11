@@ -31,8 +31,8 @@ def _rounded_shape(canvas, width, height, radius, color, border=None):
 
 class RoundedButton(tk.Canvas):
     """A themeable centered button with Tk-style config(state=...)."""
-    def __init__(self, parent, text, command, *, bg='#252A40',
-                 hover='#343953', fg='#F3F4FC', parent_bg=None,
+    def __init__(self, parent, text, command, *, bg='#29292F',
+                 hover='#36363E', fg='#E3E3E8', parent_bg=None,
                  padx=15, pady=9, font=('Segoe UI', 10, 'bold'),
                  radius=10, width=None, height=None, **kwargs):
         self._font = font
@@ -79,12 +79,12 @@ class RoundedButton(tk.Canvas):
         self.delete('all')
         w, h = max(self.winfo_width(), int(self.cget('width'))), max(self.winfo_height(), int(self.cget('height')))
         if self._state == 'disabled':
-            bg, fg = '#242738', '#7E88A6'
+            bg, fg = '#242738', '#83838F'
         else:
             bg = self._hover_color if self._hovered else self._fill
             fg = self._text_color
         _rounded_shape(self, w, h, self.radius, bg,
-                       '#A077FF' if self.focus_get() == self else bg)
+                       '#258AD8' if self.focus_get() == self else bg)
         self.create_text(w/2, h/2, text=self._label, fill=fg,
                          font=self._font, anchor='center', justify='center',
                          width=max(10, w-14))
@@ -119,8 +119,8 @@ class RoundedNavButton(RoundedButton):
     def __init__(self, parent, text, command, *, width=198, **kwargs):
         super().__init__(parent, text, command, width=width, height=41,
                          font=('Segoe UI', 10), radius=10,
-                         bg='#101321', hover='#252A40', fg='#A8AEC4',
-                         parent_bg='#101321', **kwargs)
+                         bg='#141418', hover='#29292F', fg='#A2A2AE',
+                         parent_bg='#141418', **kwargs)
 
     def set_hover(self, hovered):
         self._hovered = bool(hovered)
@@ -128,9 +128,9 @@ class RoundedNavButton(RoundedButton):
 
     def set_selected(self, selected):
         self._selected = bool(selected)
-        self._fill = '#302449' if selected else '#101321'
-        self._hover_color = '#382754' if selected else '#252A40'
-        self._text_color = '#F3F4FC' if selected else '#A8AEC4'
+        self._fill = '#173449' if selected else '#141418'
+        self._hover_color = '#20465F' if selected else '#29292F'
+        self._text_color = '#E3E3E8' if selected else '#A2A2AE'
         self._font = ('Segoe UI', 10, 'bold' if selected else 'normal')
         self._render()
 
@@ -138,14 +138,14 @@ class RoundedNavButton(RoundedButton):
 class RoundedEntry(tk.Canvas):
     """Single-line centered editable field with a rounded border."""
     def __init__(self, parent, *, textvariable=None, width=160,
-                 bg='#252A40', parent_bg=None, **kwargs):
+                 bg='#29292F', parent_bg=None, **kwargs):
         self._fill = bg
         self._focus = False
         super().__init__(parent, width=width, height=40, bg=parent_bg or parent.cget('bg'),
                          highlightthickness=0, bd=0, **kwargs)
         self.entry = tk.Entry(self, textvariable=textvariable,
-                              bg=bg, fg='#F3F4FC', insertbackground='#F3F4FC',
-                              selectbackground='#8859EA', selectforeground='white',
+                              bg=bg, fg='#E3E3E8', insertbackground='#E3E3E8',
+                              selectbackground='#1976C5', selectforeground='white',
                               font=('Segoe UI',10), justify='center',
                               relief='flat', bd=0, highlightthickness=0)
         self.entry.place(x=12, y=9, relwidth=1, width=-24, height=22)
@@ -168,7 +168,7 @@ class RoundedEntry(tk.Canvas):
         w,h=max(self.winfo_width(),int(self.cget('width'))),max(self.winfo_height(),40)
         if w>=3:
             self.create_polygon(*rounded_points(w-1,h-1,10),fill=self._fill,
-                                outline='#A077FF' if self._focus else '#343953',
+                                outline='#258AD8' if self._focus else '#36363E',
                                 width=2 if self._focus else 1,
                                 smooth=True,splinesteps=18,tags='background')
             self.tag_lower('background')
@@ -177,7 +177,7 @@ class RoundedEntry(tk.Canvas):
 class RoundedSelect(tk.Canvas):
     """Keyboard-accessible centered select menu with a tracked Tk variable."""
     def __init__(self, parent, *, textvariable, values, width=140,
-                 bg='#252A40', parent_bg=None, **kwargs):
+                 bg='#29292F', parent_bg=None, **kwargs):
         self._variable = textvariable
         self._values = tuple(str(v) for v in values)
         self._fill = bg
@@ -200,8 +200,8 @@ class RoundedSelect(tk.Canvas):
 
     def _open(self, _event=None):
         self.focus_set()
-        menu=tk.Menu(self,tearoff=0,bg='#252A40',fg='#F3F4FC',
-                     activebackground='#8859EA',activeforeground='white',
+        menu=tk.Menu(self,tearoff=0,bg='#29292F',fg='#E3E3E8',
+                     activebackground='#1976C5',activeforeground='white',
                      font=('Segoe UI',10),bd=0,relief='flat')
         for item in self._values:
             menu.add_command(label=item,command=lambda v=item:self._choose(v))
@@ -217,11 +217,11 @@ class RoundedSelect(tk.Canvas):
     def _render(self, _event=None):
         self.delete('all')
         w,h=max(self.winfo_width(),int(self.cget('width'))),max(self.winfo_height(),40)
-        bg='#30364F' if self._hovered else self._fill
-        _rounded_shape(self,w,h,10,bg,'#A077FF' if self.focus_get()==self else '#343953')
+        bg='#36363E' if self._hovered else self._fill
+        _rounded_shape(self,w,h,10,bg,'#258AD8' if self.focus_get()==self else '#36363E')
         self.create_text((w-21)/2,h/2,text=self._variable.get(),
-                         fill='#F3F4FC',font=('Segoe UI',10),anchor='center')
-        self.create_text(w-18,h/2,text='▾',fill='#B5A0E8',
+                         fill='#E3E3E8',font=('Segoe UI',10),anchor='center')
+        self.create_text(w-18,h/2,text='▾',fill='#A2A2AE',
                          font=('Segoe UI',12,'bold'),anchor='center')
 
     def destroy(self):

@@ -13,6 +13,7 @@ import numpy as np
 from PIL import Image
 
 from core.preview import ObjViewer
+from .studio_scene import PREVIEW_LIMIT, studio_background
 
 try:
     from PIL import ImageTk
@@ -41,6 +42,8 @@ class TexturedObjViewer(ObjViewer):
         self.environment_preset = 'Estúdio'
         self._backend_label = 'Prévia'
         self._texture_image = None
+        self._backdrop_image = None
+        self._backdrop_size = None
         self._preview_status = ''
         self._paint_ticket = 0
         self._scheduled = None
@@ -163,20 +166,20 @@ class TexturedObjViewer(ObjViewer):
         if textured and self._texture_image is not None:
             self.delete('all')
             width,height=self.winfo_width(),self.winfo_height()
-            self.create_rectangle(0,0,width,height,fill='#111522',outline='')
+            self._draw_backdrop(width,height)
             self.create_image(width//2,height//2,image=self._texture_image)
             self.create_text(12,max(height-15,1),anchor='sw',
                              text=self._backend_label+' · prévia em atualização',
-                             fill='#D6CAE8',font=('Segoe UI',9))
+                             fill='#9999A5',font=('Segoe UI',9))
         elif textured:
             # An asynchronous frame may take a moment; show a clear loading
             # state rather than the misleading dark 1600-face geometry view.
             self.delete('all')
             width,height=self.winfo_width(),self.winfo_height()
-            self.create_rectangle(0,0,width,height,fill='#151A29',outline='')
+            self._draw_backdrop(width,height)
             self.create_text(width//2,height//2-13,
                              text='Preparando prévia colorida…',
-                             fill='#D8C4FF',font=('Segoe UI',13,'bold'))
+                             fill='#DDDEE6',font=('Segoe UI',13,'bold'))
             self.create_text(width//2,height//2+15,
                              text='Renderização GPU ou CPU de reserva',
                              fill='#9EA9C2',font=('Segoe UI',10))
@@ -190,6 +193,15 @@ class TexturedObjViewer(ObjViewer):
             self._scheduled=self.after(50 if self.pbr_gpu_enabled else 180,
                                        self._start_texture)
 
+    def _draw_backdrop(self,width,height):
+        if ImageTk is None:
+            return
+        size=(max(1,width),max(1,height))
+        if self._backdrop_size != size:
+            self._backdrop_image=ImageTk.PhotoImage(studio_background(*size),master=self)
+            self._backdrop_size=size
+        self.create_image(width//2,height//2,image=self._backdrop_image)
+
     def _start_texture(self):
         self._scheduled = None
         if self._worker_busy or self.display_mode != 'textured':
@@ -197,8 +209,9 @@ class TexturedObjViewer(ObjViewer):
         if self._mesh is None or self._albedo is None:
             return
         ticket = self._paint_ticket
-        width = min(720,max(160,self.winfo_width()))
-        height = min(720,max(160,self.winfo_height()))
+        canvas_size=(self.winfo_width(),self.winfo_height())
+        width = min(PREVIEW_LIMIT,max(160,canvas_size[0]))
+        height = min(PREVIEW_LIMIT,max(160,canvas_size[1]))
         args=(self._mesh,self._albedo,self._maes,self._normal_map,
               self.yaw,self.pitch,self.zoom,width,height,self.pan_x,self.pan_y,
               self.compare_reference,self.light_intensity,self.emission_intensity,
@@ -207,7 +220,7 @@ class TexturedObjViewer(ObjViewer):
 
         def worker():
             try:
-                frame,status=render_preview(*args)
+                frame,status=render_preview(*args,canvas_size=canvas_size)
                 self._events.put((ticket,frame,status,None))
             except Exception as exc:
                 self._events.put((ticket,None,None,str(exc)))
@@ -235,7 +248,7 @@ class TexturedObjViewer(ObjViewer):
                     self._texture_image=ImageTk.PhotoImage(image,master=self)
                     width,height=self.winfo_width(),self.winfo_height()
                     self.delete('all')
-                    self.create_rectangle(0,0,width,height,fill='#111522',outline='')
+                    self._draw_backdrop(width,height)
                     self.create_image(width//2,height//2,image=self._texture_image)
                     if self.stats:
                         self.create_text(12,12,anchor='nw',
@@ -244,7 +257,7 @@ class TexturedObjViewer(ObjViewer):
                     self.create_text(12,max(height-15,1),anchor='sw',
                                      text=(self._backend_label+' · Referência 1×1' if self.compare_reference
                                           else self._backend_label+' · botão direito: girar · roda: zoom'),
-                                     fill='#D6CAE8',font=('Segoe UI',9))
+                                     fill='#9999A5',font=('Segoe UI',9))
         except queue.Empty:
             pass
         try:

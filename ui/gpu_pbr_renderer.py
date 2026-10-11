@@ -10,6 +10,7 @@ import threading
 import numpy as np
 from PIL import Image
 from .texture_renderer import draw, draw_fast, MAX_TRIANGLES
+from .studio_scene import studio_background
 
 VS = """#version 330
 in vec3 in_position;
@@ -213,7 +214,7 @@ class GPUPreview:
 
     def render(self,mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                pan_x=0.,pan_y=0.,light=1.0,emission=1.0,
-               ambient=1.0,environment='Estúdio'):
+               ambient=1.0,environment='Estúdio',canvas_size=None):
         self._thread_check()
         _validate_settings(light,emission,ambient,environment)
         width=int(max(100,min(width,900)))
@@ -227,7 +228,7 @@ class GPUPreview:
         fbo=self._fbo(width,height)
         fbo.use()
         self.ctx.viewport=(0,0,width,height)
-        fbo.clear(.0667,.08235,.1333,1.0,depth=1.0)
+        fbo.clear(0.,0.,0.,0.,depth=1.0)
         props={
             'u_yaw':float(yaw),'u_pitch':float(pitch),
             'u_unit':float(unit),'u_depth_span':float(extent)*2.0,
@@ -252,9 +253,10 @@ class GPUPreview:
             normal_map=self._neutral_normal
         self._texture('normal',normal_map,3).use(location=2)
         self.vao.render(mode=self.gl.TRIANGLES)
-        pixels=fbo.read(components=3,alignment=1)
+        pixels=fbo.read(components=4,alignment=1)
         self.render_calls+=1
-        return Image.frombytes('RGB',(width,height),pixels).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        model=Image.frombytes('RGBA',(width,height),pixels).transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        return Image.alpha_composite(studio_background(width,height,canvas_size).convert('RGBA'),model).convert('RGB')
 
 
 _THREAD=threading.local()
@@ -263,7 +265,7 @@ _THREAD=threading.local()
 def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                    pan_x=0.,pan_y=0.,show_reference=False,light=1.0,
                    emission=1.0,force_cpu=False,ambient=1.0,
-                   environment='Estúdio'):
+                   environment='Estúdio',canvas_size=None):
     """Render on worker only; automatically fallback on unsupported hardware."""
     _validate_settings(float(light),float(emission),float(ambient),environment)
     if not show_reference and not force_cpu:
@@ -274,7 +276,7 @@ def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                 _THREAD.gpu=gpu
             if gpu is not None:
                 img=gpu.render(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,
-                               height,pan_x,pan_y,light,emission,ambient,environment)
+                               height,pan_x,pan_y,light,emission,ambient,environment,canvas_size)
                 return img,'GPU OpenGL 3.3 · PBR (prévia)'
         except Exception as exc:
             # Expose a short diagnostic instead of hiding a driver/shader issue.
@@ -283,11 +285,11 @@ def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
             _THREAD.gpu_error=f'{type(exc).__name__}: {str(exc)[:95]}'
     if len(mesh.triangles)>4500:
         img=draw_fast(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
-                      show_reference,1.75)
+                      show_reference,1.75,canvas_size)
         backend='CPU · Albedo rápido colorido'
     else:
         img=draw(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
-                 False,show_reference,1.75)
+                 False,show_reference,1.75,canvas_size)
         backend='CPU · Albedo texturizado'
     reason=getattr(_THREAD,'gpu_error',None)
     if reason and not force_cpu:

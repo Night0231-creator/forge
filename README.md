@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v4.1.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v4.2.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v4.1.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v4.2.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -234,3 +234,14 @@ A interface principal do executável foi redesenhada para colocar **pintura, pro
 - Regiões conectadas da geometria com ângulo ajustável e preenchimento para modelos sem cores.
 - Materiais personalizados, seleção realçada no 3D e ferramentas com rolagem.
 - Mantém preparação, backups e reexportação TaleSpire. [Guia e limites](docs/V4_1_SURFACE_PAINT.md).
+
+
+## V4.2.0 — Novo visual do estúdio
+
+- Painéis cinza-escuro, seleção azul e ferramentas vetoriais compactas.
+- Menus Arquivo / Preparar / Exportar / Ajuda; projetos no seletor superior e painel recolhível.
+- Paleta com busca por nome e categorias; cor personalizada por seletor ou código hexadecimal.
+- Controles do pincel no painel lateral, materiais e camadas em abas; iluminação e mapa UV em Exibir.
+- Grade discreta na prévia GPU/CPU, vistas de câmera e movimento com o botão do meio.
+- O visual segue a organização das imagens públicas do Basecoat, com marca e implementação próprias.
+- A grade é apenas visual: não muda a malha, a escala ou as texturas exportadas.
