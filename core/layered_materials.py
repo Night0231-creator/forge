@@ -284,6 +284,7 @@ class LayeredPaintSession(PaintSession):
             'size':list(self.original.size),
             'active':self.active_layer,
             'layers':descriptions,
+            'maes_dirty':bool(self.maes_dirty),
         }
         (paint_dir/'camadas.json').write_text(
             json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
@@ -329,7 +330,8 @@ class LayeredPaintSession(PaintSession):
             self.active_layer=active
             # Restore MAES only when the matching draft belongs to this project.
             p=folder/'MAES_editado.png'
-            if self.maes_image is not None and p.is_file() and not p.is_symlink():
+            if (self.maes_image is not None and data.get('maes_dirty')
+                    and p.is_file() and not p.is_symlink()):
                 with Image.open(p) as raw:
                     if raw.size == self.maes_image.size:
                         self.maes_image=raw.convert('RGBA')
