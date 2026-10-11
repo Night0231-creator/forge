@@ -311,14 +311,16 @@ class PaintingStudio(tk.Frame):
         if ancestor is None:
             return
         key=event.keysym.lower()
+        # NumLock/CapsLock are toggle states, not a reason to ignore a tool key.
+        # Alt (including the Windows flag) stays available to menus/AltGr.
+        if event.state & (8 | 64 | 0x20000):
+            return
         if event.state & 4:
             actions={'s':self._save,'z':self._redo if event.state & 1 else self._undo,
                      'y':self._redo}
             if key in actions:
                 actions[key]()
                 return 'break'
-            return
-        if event.state & (8 | 16 | 32 | 64 | 128):
             return
         tools={'b':'pincel','g':'balde','s':'carimbo','r':'regiao','i':'conta-gotas','e':'borracha'}
         if key in tools:

@@ -106,6 +106,12 @@ class DesktopSurfaceTests(unittest.TestCase):
         self.panel._shortcut(SimpleNamespace(widget=outside,keysym='e',state=0))
         self.assertEqual(self.panel.mode.get(),'balde')
         outside.destroy()
+        self.panel._shortcut(SimpleNamespace(widget=tool,keysym='b',state=16))
+        self.assertEqual(self.panel.mode.get(),'pincel')
+        with patch.object(self.panel,'_save') as save:
+            self.panel._shortcut(SimpleNamespace(widget=tool,keysym='s',state=4|8))
+            self.panel._shortcut(SimpleNamespace(widget=tool,keysym='s',state=4|0x20000))
+            save.assert_not_called()
 
     def test_closing_editor_removes_its_shortcuts_and_tooltip_timer(self):
         sibling=self.root.bind('<KeyPress>',lambda _event:None,add='+')
