@@ -70,6 +70,18 @@ class PaintingStudio(tk.Frame):
         if self.session.restored_layers:
             self.status.set('Camadas da pintura anterior restauradas. A textura MAES é exibida somente após exportar no jogo.')
 
+    def destroy(self):
+        """Cancel pending renders when a project closes or switches."""
+        for name in ('_refresh_id', '_preview_job'):
+            job = getattr(self, name, None)
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
+        super().destroy()
+
     @staticmethod
     def _label(parent, text, color=TEXT, size=10, bold=False, **kw):
         return tk.Label(parent,text=text,bg=parent.cget('bg'),fg=color,

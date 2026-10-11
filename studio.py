@@ -58,10 +58,11 @@ class UpdateInterface:
         self._downloading_update = False
         self._update_window = None
         self._auto_update_job = None
+        self._startup_update_job = None
         self._last_notified_version = None
-        self.after(120, self._poll_updates)
+        self._poll_update_job = self.after(120, self._poll_updates)
         if self.auto_update_check.get():
-            self.after(STARTUP_DELAY_MS, lambda: self._check_updates(False))
+            self._startup_update_job = self.after(STARTUP_DELAY_MS, lambda: self._check_updates(False))
         self._schedule_update_checks()
 
     def _schedule_update_checks(self):
@@ -97,6 +98,7 @@ class UpdateInterface:
         threading.Thread(target=work, daemon=True).start()
 
     def _poll_updates(self):
+        self._poll_update_job = None
         try:
             while True:
                 event = self.update_events.get_nowait()
@@ -135,7 +137,7 @@ class UpdateInterface:
         except queue.Empty:
             pass
         if self.winfo_exists():
-            self.after(120, self._poll_updates)
+            self._poll_update_job = self.after(120, self._poll_updates)
 
     def _show_update(self, release):
         if self._update_window and self._update_window.winfo_exists():
@@ -220,7 +222,7 @@ class Studio(UpdateInterface, legacy.Forge):
                 pass
         self.geometry('1440x880')
         self.minsize(1120, 720)
-        self.after(80, self.refresh_library)
+        self._startup_library_job = self.after(80, self.refresh_library)
         self.bind('<Control-o>', lambda _event: self._pick_source())
         self.bind('<Control-l>', lambda _event: self._navigate('library', 'tab_library'))
         self.bind('<Control-r>', lambda _event: self.refresh_library())
@@ -599,14 +601,16 @@ class Studio(UpdateInterface, legacy.Forge):
             super()._scroll_wheel(event)
 
     def destroy(self):
-        """Cancel pending update polling before Tcl widgets are destroyed."""
-        job = getattr(self, '_auto_update_job', None)
-        if job is not None:
-            try:
-                self.after_cancel(job)
-            except tk.TclError:
-                pass
-            self._auto_update_job = None
+        """Cancel startup and update callbacks before Tcl commands are deleted."""
+        for name in ('_auto_update_job', '_poll_update_job',
+                     '_startup_update_job', '_startup_library_job'):
+            job = getattr(self, name, None)
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, name, None)
         super().destroy()
 
     def _read_log(self):

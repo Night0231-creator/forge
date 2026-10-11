@@ -67,6 +67,16 @@ class DesktopSurfaceTests(unittest.TestCase):
         self.assertEqual(self.panel.session.maes_image.getpixel((70,200)),(0,255,0,30))
         self.assertGreater(self.panel.viewer.winfo_width(),400)
 
+    def test_closing_editor_cancels_pending_texture_and_preview_renders(self):
+        self.panel._request_refresh()
+        self.panel._schedule_preview()
+        jobs={self.panel._refresh_id,self.panel._preview_job}
+        self.assertNotIn(None,jobs)
+        self.assertTrue(jobs.issubset(set(self.root.tk.call('after','info'))))
+        self.panel.destroy()
+        self.assertFalse(jobs.intersection(self.root.tk.call('after','info')))
+        self.root.update()
+
 
 if __name__=='__main__':
     unittest.main()

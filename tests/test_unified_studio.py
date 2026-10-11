@@ -51,6 +51,9 @@ class UnifiedStudioTests(unittest.TestCase):
             probe.destroy()
         from studio import Studio
         app=Studio()
+        jobs={app._startup_library_job,app._poll_update_job,
+              app._startup_update_job,app._auto_update_job}
+        jobs.discard(None)
         try:
             app.withdraw()
             app.update_idletasks()
@@ -59,6 +62,7 @@ class UnifiedStudioTests(unittest.TestCase):
             self.assertEqual(app.tabs.select(),str(app.tab_workspace))
         finally:
             app.destroy()
+        self.assertFalse(jobs.intersection(app.tk.call('after','info')))
 
     def test_version(self):
         from core.version import APP_VERSION
