@@ -107,6 +107,20 @@ class LayeredPaintSession(PaintSession):
             result = Image.alpha_composite(result, pixels)
         self.image = result
 
+    def _compose_region(self, box):
+        """Recompose only dirty rectangle while brushing; no 4K full repaint per move."""
+        result=self.base.crop(box)
+        for layer in self.layers:
+            if not layer.visible or layer.opacity <= 0:
+                continue
+            pixels=layer.pixels.crop(box)
+            if layer.opacity < 100:
+                alpha=pixels.getchannel('A').point(
+                    lambda value: round(value*layer.opacity/100))
+                pixels.putalpha(alpha)
+            result=Image.alpha_composite(result,pixels)
+        self.image.paste(result,box)
+
     def _snapshot(self):
         return ([PaintLayer(layer.name, layer.pixels.copy(),
                             layer.visible, layer.opacity) for layer in self.layers],
@@ -214,7 +228,13 @@ class LayeredPaintSession(PaintSession):
             pigment.putalpha(mask)
             part = Image.alpha_composite(part,pigment)
         layer.pixels.paste(part,box)
-        self._compose()
+        # Painting changes a small atlas rectangle: full compositing here
+        # previously copied every pixel of every layer on each mouse motion.
+        region=mask.getbbox()
+        if region is not None:
+            dirty=(box[0]+region[0],box[1]+region[1],
+                   box[0]+region[2],box[1]+region[3])
+            self._compose_region(dirty)
 
     def stroke(self, start: tuple[int,int], end: tuple[int,int],
                color: str, size: int = 18, opacity: float = 1.,

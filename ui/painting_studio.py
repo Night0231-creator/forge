@@ -182,6 +182,8 @@ class PaintingStudio(tk.Frame):
         self._pbr_on=tk.BooleanVar(value=True)
         self._light_level=tk.IntVar(value=100)
         self._emission_level=tk.IntVar(value=100)
+        self._ambient_level=tk.IntVar(value=100)
+        self._environment=tk.StringVar(value='Estúdio')
         try:
             self.viewer.open(find_project_obj(self.project))
         except (OSError,ValueError) as exc:
@@ -211,6 +213,19 @@ class PaintingStudio(tk.Frame):
                  variable=self._emission_level,command=lambda _v:self._apply_lighting(),
                  length=125,showvalue=False,bg='#1B2032',fg=TEXT,
                  troughcolor=FIELD,highlightthickness=0).pack(side='left',padx=4)
+        ambience=tk.Frame(viewport,bg='#1B2032')
+        ambience.pack(fill='x',padx=9)
+        self._label(ambience,'Ambiente',color=MUTED,size=9).pack(side='left',padx=(3,8))
+        from ui.gpu_pbr_renderer import ENV_PRESETS
+        ttk.Combobox(ambience,textvariable=self._environment,
+                     values=list(ENV_PRESETS),state='readonly',
+                     width=15).pack(side='left',padx=(0,9))
+        self._label(ambience,'Intensidade',color=MUTED,size=9).pack(side='left')
+        tk.Scale(ambience,from_=0,to=200,resolution=10,orient='horizontal',
+                 variable=self._ambient_level,command=lambda _v:self._apply_lighting(),
+                 length=140,showvalue=False,bg='#1B2032',fg=TEXT,
+                 troughcolor=FIELD,highlightthickness=0).pack(side='left',padx=(4,12))
+        self._environment.trace_add('write',lambda *_:self._apply_lighting())
         vfoot=tk.Frame(viewport,bg='#1B2032')
         vfoot.pack(fill='x')
         self.paint3d_enabled=tk.BooleanVar(value=True)
@@ -246,6 +261,8 @@ class PaintingStudio(tk.Frame):
         if hasattr(self,'viewer'):
             self.viewer.set_lighting(light=self._light_level.get()/100,
                                      emission=self._emission_level.get()/100,
+                                     ambient=self._ambient_level.get()/100,
+                                     environment=self._environment.get(),
                                      gpu=self._pbr_on.get())
 
     def _toggle_uv_panel(self):
@@ -359,9 +376,9 @@ class PaintingStudio(tk.Frame):
         self._label(tab,availability,color=GREEN if self.session.maes_image is not None
                     else MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(16,0))
         self._label(tab,'Canais MAES: Vermelho=Metal, Verde=AO, Azul=Emissão, Alfa=Suavidade. '
-                    'Com GPU OpenGL 3.3 a prévia usa MAES para reflexos, '
-                    'metal, emissão e iluminação. O TaleSpire pode renderizar '
-                    'de modo diferente: confirme após reexportar.',
+                    'A prévia GPU simula metal, emissão e luz ambiente. '
+                    'Escolha Estúdio, Pôr do sol ou Luar no painel 3D. '
+                    'A aparência real no TaleSpire pode ser diferente.',
                     color=MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(14,0))
 
     def _apply_material(self):
@@ -543,7 +560,7 @@ class PaintingStudio(tk.Frame):
 
     def _schedule_preview(self):
         if self._preview_job is None:
-            self._preview_job=self.after(280,self._refresh_live_preview)
+            self._preview_job=self.after(90,self._refresh_live_preview)
 
     def _refresh_live_preview(self):
         self._preview_job=None
@@ -552,10 +569,9 @@ class PaintingStudio(tk.Frame):
         image=self.session.image.convert('RGB')
         image.thumbnail((1024,1024),Image.Resampling.BILINEAR)
         self.viewer._albedo=np.asarray(image,dtype=np.uint8).copy()
-        if self.session.maes_image is not None:
-            self.viewer.set_materials(self.session.maes_image)
-        else:
-            self.viewer.render()
+        # The MAES map changes only when a material preset is applied,
+        # not on every albedo brush stroke. Avoid repeated 1024px copies.
+        self.viewer.render()
 
     def _undo(self):
         if self.session.undo():

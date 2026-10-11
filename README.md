@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v3.1.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v3.2.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v3.1.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v3.2.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -204,3 +204,13 @@ A interface principal do executável foi redesenhada para colocar **pintura, pro
 - **Fallback automático**: drivers sem OpenGL 3.3 continuam com renderizador CPU de Albedo. O status no viewer informa qual modo foi usado.
 - Prévia limitada a 150 mil triângulos e 900x900 pixels por frame; renderização GPU + cópia GPU→Tk não garantem 60 FPS.
 - PyInstaller inclui ModernGL e glcontext; CI Windows testa código, aplicativo empacotado, instalador e ZIP portátil. [Guia V3.1](docs/V3_1_GPU_PBR_PREVIEW.md).
+
+
+## V3.2.0 — Pintura fluida e iluminação ambiente
+
+- Quando você pinta ou gira uma miniatura, o render mantém a última imagem enquanto a próxima é calculada, sem redesenhar até 1600 polígonos Tk em toda movimentação.
+- Pincel e borracha recompõem somente o retângulo da textura alterado. As operações que modificam camadas inteiras continuam recompondo a textura completa quando necessário.
+- O modo OpenGL 3.3 / ModernGL inclui três presets de iluminação ambiente hemisférica: Estúdio, Pôr do sol e Luar, com intensidade ajustável de 0–200%. Não é um HDRI real e não promete 60 FPS.
+- Atualizações da cor Albedo deixam de copiar o mapa MAES a cada pincelada. Os dados MAES continuam modificados somente pelo material e sua exportação.
+- O modo CPU de reserva, histórico/rascunhos/backups e exportação TaleWeaverLite permanecem disponíveis; nada modifica automaticamente .tsMod nem escala 1x1.
+- [Guia V3.2](docs/V3_2_SMOOTH_PAINT_ENV_LIGHTING.md).
