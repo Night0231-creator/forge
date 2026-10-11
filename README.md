@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.3.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.4.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.3.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.4.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -170,3 +170,14 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Desfazer/refazer, rascunho e backups continuam; o .tsMod precisa ser gerado novamente para refletir as alterações.
 - A seleção é calculada por CPU e é limitada às faces renderizadas do OBJ. Não é aceleração por GPU nem pintura PBR.
 - [Guia V2.3](docs/V2_3_3D_PAINT.md).
+
+## V2.4.0 — Camadas, seleção inteligente e materiais TaleSpire
+
+- No **Painting Studio**, novas abas Pincéis, Camadas e Materiais para manter a interface compacta.
+- As camadas são transparentes e editáveis independentemente: adicionar/remover, ocultar, controlar opacidade, alterar ordem, desfazer/refazer. O limite dinâmico de camadas protege a memória em texturas grandes.
+- **Selecionar região similar** encontra a área conectada de cor semelhante (tolerância ajustável) no atlas, clicando também sobre o 3D. Pincel, borracha e balde respeitam a seleção.
+- Presets Aço, Ouro, Bronze, Couro, Tecido, Pele, Pedra e Cristal editam a textura **MAES** da região selecionada, usando os canais R=Metallic, G=AO, B=Emissive, A=Smoothness, com undo.
+- Salvar gera Albedo_editado.png, camadas/camada_XX.png, camadas.json e, se houver edição de material, MAES_editado.png. Reabrir restaura as camadas somente se a imagem-base ainda corresponder ao projeto salvo.
+- Aplicar gera backups dos Albedos e MAES existentes antes de modificar os arquivos que alimentam TaleWeaverCmd/Unity. A pasta de staging não excede 2048 em nenhuma dimensão.
+- **A prévia ainda mostra Albedo; o metal/brilho/emissão devem ser verificados dentro do TaleSpire** após gerar novamente o .tsMod. O programa não altera a física/base 1×1.
+- [Manual da V2.4](docs/V2_4_LAYERED_MATERIALS.md).

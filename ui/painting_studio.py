@@ -1,7 +1,7 @@
 """Basecoat-inspired, independently designed Astronyx UV painting workbench.
 
-UV atlas is editable; the 3D viewer is refreshed after applying to export.
-Real-time brush raycasting on the mesh is not yet implemented.
+Albedo layers and local MAES presets share the V2.3 3D UV brush.
+The 3D CPU preview shows Albedo only, not simulated metallic/emissive shading.
 """
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ import numpy as np
 
 from ui.paint3d_picker import ProjectedUVPicker
 
-from core.paint_studio import PaintSession, PALETTE, find_albedo, apply_paint_to_export
+from core.paint_studio import PALETTE, find_albedo
+from core.layered_materials import LayeredPaintSession, PRESETS, apply_materials_to_export
 from core.footprint_calibrator import find_project_obj
 from ui.texture_viewer import TexturedObjViewer
 
@@ -30,9 +31,9 @@ GREEN = '#64DAB1'
 class PaintingStudio(tk.Toplevel):
     def __init__(self, parent, project: str | Path, on_apply=None):
         self.project = Path(project).resolve()
-        self.session = PaintSession(find_albedo(self.project))
+        self.session = LayeredPaintSession(find_albedo(self.project),self.project)
         super().__init__(parent)
-        self.title('Astronyx • Painting Studio — Editor UV')
+        self.title('Astronyx • Painting Studio — Camadas & Materiais V2.4')
         self.configure(bg=BG)
         self.geometry('1320x800')
         self.minsize(1080,680)
@@ -57,6 +58,8 @@ class PaintingStudio(tk.Toplevel):
         self._preview_job = None
         self._make_ui()
         self._render_texture()
+        if self.session.restored_layers:
+            self.status.set('Camadas da pintura anterior restauradas. A textura MAES é exibida somente após exportar no jogo.')
 
     @staticmethod
     def _label(parent, text, color=TEXT, size=10, bold=False, **kw):
@@ -119,12 +122,23 @@ class PaintingStudio(tk.Toplevel):
                        bg=PANEL,fg=TEXT,selectcolor=FIELD,activebackground=PANEL,
                        activeforeground=TEXT).pack(anchor='w',padx=10,pady=(0,12))
 
-        right=tk.Frame(body,bg=PANEL,width=245)
-        right.pack(side='right',fill='y')
-        right.pack_propagate(False)
+        right_container=tk.Frame(body,bg=PANEL,width=280)
+        right_container.pack(side='right',fill='y')
+        right_container.pack_propagate(False)
+        tabs=ttk.Notebook(right_container)
+        tabs.pack(fill='both',expand=True,pady=(6,0))
+        right=tk.Frame(tabs,bg=PANEL)
+        layers_tab=tk.Frame(tabs,bg=PANEL)
+        materials_tab=tk.Frame(tabs,bg=PANEL)
+        tabs.add(right,text='Pincéis')
+        tabs.add(layers_tab,text='Camadas')
+        tabs.add(materials_tab,text='Materiais')
+        self._build_layers_tab(layers_tab)
+        self._build_materials_tab(materials_tab)
         self._label(right,'FERRAMENTAS',bold=True).pack(anchor='w',padx=14,pady=(14,8))
         for title,key in (('Pincel livre','pincel'),('Balde de cores','balde'),
-                          ('Conta-gotas','conta-gotas'),('Restaurar original','borracha')):
+                          ('Conta-gotas','conta-gotas'),('Restaurar original','borracha'),
+                          ('Selecionar região similar','regiao')):
             tk.Radiobutton(right,text=title,value=key,variable=self.mode,
                            bg=PANEL,fg=TEXT,selectcolor=FIELD,
                            activebackground=PANEL,activeforeground=TEXT,
@@ -152,6 +166,8 @@ class PaintingStudio(tk.Toplevel):
         actions.pack(fill='x',padx=10,pady=(5,10))
         self._button(actions,'Desfazer',self._undo).pack(side='left',padx=3)
         self._button(actions,'Refazer',self._redo).pack(side='left',padx=3)
+        self._label(right,'Selecione uma região no 3D ou no atlas UV para aplicar material somente nela.',
+                    color=MUTED,wraplength=245).pack(fill='x',padx=12,pady=(5,0))
 
         footer=tk.Frame(self,bg=BG)
         footer.pack(fill='x',padx=18,pady=12)
@@ -159,6 +175,133 @@ class PaintingStudio(tk.Toplevel):
                     wraplength=780).pack(side='left',fill='x',expand=True)
         self._button(footer,'Salvar rascunho',self._save).pack(side='right',padx=(8,0))
         self._button(footer,'Aplicar na exportação',self._apply,highlight=True).pack(side='right')
+
+    def _build_layers_tab(self,tab):
+        self._label(tab,'CAMADAS DE ALBEDO',bold=True).pack(anchor='w',padx=12,pady=(14,5))
+        self.layer_list=tk.Listbox(tab,height=10,bg=FIELD,fg=TEXT,
+                                   selectbackground=PURPLE,relief='flat',
+                                   exportselection=False)
+        self.layer_list.pack(fill='x',padx=10,pady=(0,8))
+        self.layer_list.bind('<<ListboxSelect>>',self._layer_select)
+        options=tk.Frame(tab,bg=PANEL)
+        options.pack(anchor='w',padx=7)
+        for name,command in (('+',self._layer_add),('−',self._layer_remove),
+                             ('↑',lambda:self._layer_move(-1)),
+                             ('↓',lambda:self._layer_move(1))):
+            self._button(options,name,command).pack(side='left',padx=2)
+        self.layer_visible=tk.BooleanVar(value=True)
+        tk.Checkbutton(tab,text='Camada visível',variable=self.layer_visible,
+                       command=self._layer_visibility,bg=PANEL,fg=TEXT,
+                       selectcolor=FIELD,activebackground=PANEL,
+                       activeforeground=TEXT).pack(anchor='w',padx=12,pady=(12,5))
+        self.layer_opacity=tk.IntVar(value=100)
+        self._label(tab,'Opacidade da camada',color=MUTED).pack(anchor='w',padx=12)
+        opacity=tk.Scale(tab,from_=0,to=100,orient='horizontal',
+                         variable=self.layer_opacity,bg=PANEL,fg=TEXT,
+                         troughcolor=FIELD,highlightthickness=0)
+        opacity.pack(fill='x',padx=12)
+        opacity.bind('<ButtonRelease-1>',self._layer_opacity_change)
+        self._label(tab,'As camadas são salvas como PNGs separados. '
+                    'Mudar visibilidade não modifica o modelo original.',
+                    color=MUTED,wraplength=245).pack(anchor='w',padx=12,pady=13)
+        self._update_layers()
+
+    def _update_layers(self):
+        if not hasattr(self,'layer_list'):
+            return
+        self.layer_list.delete(0,tk.END)
+        for layer in self.session.layers:
+            marker='●' if layer.visible else '○'
+            self.layer_list.insert(tk.END,f'{marker} {layer.name} · {layer.opacity}%')
+        idx=self.session.active_layer
+        self.layer_list.selection_set(idx)
+        self.layer_list.activate(idx)
+        layer=self.session.layers[idx]
+        self.layer_visible.set(layer.visible)
+        self.layer_opacity.set(layer.opacity)
+
+    def _layer_select(self,_event):
+        if not self.layer_list.curselection():
+            return
+        self.session.set_active(int(self.layer_list.curselection()[0]))
+        layer=self.session.layers[self.session.active_layer]
+        self.layer_visible.set(layer.visible)
+        self.layer_opacity.set(layer.opacity)
+
+    def _layer_add(self):
+        try:
+            self.session.add_layer(f'Camada {len(self.session.layers)+1}')
+            self._update_layers()
+        except ValueError as exc:
+            messagebox.showwarning('Camadas',str(exc),parent=self)
+
+    def _layer_remove(self):
+        try:
+            self.session.remove_layer()
+            self._update_layers()
+            self._request_refresh()
+            self._schedule_preview()
+        except ValueError as exc:
+            messagebox.showwarning('Camadas',str(exc),parent=self)
+
+    def _layer_move(self,step):
+        self.session.move_layer(step)
+        self._update_layers()
+        self._request_refresh()
+        self._schedule_preview()
+
+    def _layer_visibility(self):
+        self.session.set_visible(self.layer_visible.get())
+        self._update_layers()
+        self._request_refresh()
+        self._schedule_preview()
+
+    def _layer_opacity_change(self,_event):
+        self.session.set_opacity(int(self.layer_opacity.get()))
+        self._update_layers()
+        self._request_refresh()
+        self._schedule_preview()
+
+    def _build_materials_tab(self,tab):
+        self._label(tab,'MATERIAIS TALESPIRE',bold=True).pack(anchor='w',padx=12,pady=(14,5))
+        self.material_name=tk.StringVar(value=list(PRESETS)[0])
+        menu=ttk.Combobox(tab,values=list(PRESETS),textvariable=self.material_name,
+                          state='readonly',width=22)
+        menu.pack(fill='x',padx=10,pady=(3,12))
+        self._button(tab,'Aplicar na região',self._apply_material,highlight=True).pack(fill='x',padx=10)
+        self._button(tab,'Limpar seleção',self._clear_region).pack(fill='x',padx=10,pady=(8,0))
+        self._label(tab,'PASSOS',bold=True).pack(anchor='w',padx=12,pady=(20,5))
+        self._label(tab,'1. Na aba Pincéis selecione “Selecionar região similar”. '
+                    '2. Clique em uma área do 3D ou da textura. '
+                    '3. Volte aqui e aplique um material.',
+                    color=MUTED,wraplength=240).pack(anchor='w',padx=12)
+        availability=('MAES detectada' if self.session.maes_image is not None
+                      else 'MAES ausente: converta o modelo primeiro')
+        self._label(tab,availability,color=GREEN if self.session.maes_image is not None
+                    else MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(16,0))
+        self._label(tab,'Canais MAES: Vermelho=Metal, Verde=AO, Azul=Emissão, Alfa=Suavidade. '
+                    'A prévia 3D mostra apenas as cores Albedo; os efeitos '
+                    'de superfície aparecem no TaleSpire após reexportar.',
+                    color=MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(14,0))
+
+    def _apply_material(self):
+        try:
+            self.session.apply_material(self.material_name.get())
+            self.status.set('Material '+self.material_name.get()+
+                ' aplicado à região. Salve e reexporte para conferir no TaleSpire.')
+        except (OSError,ValueError) as exc:
+            messagebox.showwarning('Material',str(exc),parent=self)
+
+    def _clear_region(self):
+        self.session.clear_region()
+        self._request_refresh()
+        self.status.set('Seleção de região removida.')
+
+    def _pick_region(self,point):
+        active=self.session.select_region(*point,self.tolerance.get())
+        self.status.set('Região conectada selecionada para pintura e materiais.'
+                        if active else 'Nenhuma região selecionada.')
+        self._request_refresh()
 
     def _set_color(self,value):
         self.color.set(value)
@@ -184,6 +327,9 @@ class PaintingStudio(tk.Toplevel):
         if mode=='conta-gotas':
             self._set_color(self.session.pick(*p))
             return
+        if mode=='regiao':
+            self._pick_region(p)
+            return
         self.session.checkpoint()
         if mode=='balde':
             self.session.bucket(*p,self.color.get(),self.tolerance.get())
@@ -192,6 +338,7 @@ class PaintingStudio(tk.Toplevel):
                                 self.opacity.get()/100,erase=(mode=='borracha'))
         self._last=p if mode in ('pincel','borracha') else None
         self._request_refresh()
+        self._schedule_preview()
 
     def _mouse_drag(self,event):
         point=self._coords(event)
@@ -200,6 +347,7 @@ class PaintingStudio(tk.Toplevel):
                             self.opacity.get()/100,erase=self.mode.get()=='borracha')
         self._last=point
         self._request_refresh()
+        self._schedule_preview()
 
     def _request_refresh(self):
         if self._refresh_id is None:
@@ -218,6 +366,10 @@ class PaintingStudio(tk.Toplevel):
         y0=(ch-height)//2
         self._view=(x0,y0,scale)
         image=src.resize((width,height),Image.Resampling.BILINEAR).convert('RGB')
+        if self.session.selection is not None:
+            mask=self.session.selection.resize((width,height),Image.Resampling.NEAREST)
+            tint=Image.blend(image,Image.new('RGB',image.size,'#AA68EC'),.22)
+            image=Image.composite(tint,image,mask)
         if self.show_uv.get():
             # Overlay is preview-only, never written to the painted PNG.
             uv=ImageDraw.Draw(image)
@@ -268,6 +420,9 @@ class PaintingStudio(tk.Toplevel):
         mode=self.mode.get()
         if mode=='conta-gotas':
             self._set_color(self.session.pick(*point))
+            return
+        if mode=='regiao':
+            self._pick_region(point)
             return
         self.session.checkpoint()
         if mode=='balde':
@@ -320,18 +475,21 @@ class PaintingStudio(tk.Toplevel):
 
     def _undo(self):
         if self.session.undo():
+            self._update_layers()
             self._request_refresh()
             self._schedule_preview()
 
     def _redo(self):
         if self.session.redo():
+            self._update_layers()
             self._request_refresh()
             self._schedule_preview()
 
     def _save(self):
         try:
+            self.saved=None
             self.saved=self.session.save_draft(self.project)
-            self.status.set('Rascunho salvo: '+str(self.saved))
+            self.status.set('Rascunho e camadas salvos: '+str(self.saved))
         except (OSError,ValueError) as exc:
             messagebox.showerror('Falha ao salvar',str(exc),parent=self)
 
@@ -344,7 +502,8 @@ class PaintingStudio(tk.Toplevel):
         try:
             self._save()
             if not getattr(self,'saved',None): return
-            changed=apply_paint_to_export(self.project,self.saved)
+            changed=apply_materials_to_export(
+                self.project,self.saved,self.session.material_draft if self.session.maes_dirty else None)
             self.status.set('Pintura aplicada em '+str(len(changed))+' textura(s). Reexporte o .tsMod.')
             try:
                 self.viewer.open(find_project_obj(self.project))
