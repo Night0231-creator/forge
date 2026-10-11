@@ -25,6 +25,8 @@ from ui.texture_viewer import TexturedObjViewer
 from core.updater import find_update, download_installer, run_installer, UpdateError, is_portable
 from core.update_policy import AUTO_UPDATE_INTERVAL_MS, STARTUP_DELAY_MS, should_show_update
 from ui.rounded import RoundedNavButton
+from ui.file_drop import register_file_drop
+from core.import_drop import parse_dropped_model
 
 
 # Shared visual palette. Conversion modules and data paths remain unchanged.
@@ -183,16 +185,18 @@ class UpdateInterface:
 
 class Studio(UpdateInterface, legacy.Forge):
     viewer_class = TexturedObjViewer
+    # Only the three daily tasks stay visible. Advanced pages remain supported.
     NAV = [
-        ('home', '⌂', 'Dashboard', 'tab_dashboard'),
-        ('studio', '◈', 'Studio 3D', 'tab_preview'),
-        ('library', '▦', 'Biblioteca', 'tab_library'),
-        ('convert', '⬡', 'Converter', 'tab_quick'),
-        ('scale', '⚙', 'Ferramentas', 'tab_conv'),
-        ('export', '↗', 'Gerar .tsMod', 'tab_cmd'),
+        ('home', '⌂', 'Início', 'tab_dashboard'),
+        ('library', '▦', 'Meus modelos', 'tab_library'),
         ('install', '↓', 'Instalar no TaleSpire', 'tab_tsmod'),
-        ('help', '?', 'Ajuda e tutorial', 'tab_guide'),
+        ('convert', '⬡', 'Conversão detalhada', 'tab_quick'),
+        ('studio', '◈', 'Prévia 3D', 'tab_preview'),
+        ('scale', '⚙', 'Ajustes avançados', 'tab_conv'),
+        ('export', '↗', 'Exportação / Unity', 'tab_cmd'),
+        ('help', '?', 'Ajuda', 'tab_guide'),
     ]
+    PRIMARY_NAV = frozenset(('home', 'library', 'install'))
 
     def __init__(self):
         self.library_entries: list[Miniature] = []
@@ -200,8 +204,12 @@ class Studio(UpdateInterface, legacy.Forge):
         self.library_image_refs = []
         self.gallery_columns = 3
         self._active_nav_key = 'home'
+        self._advanced_open = False
         super().__init__()
         self._begin_updates()
+        self._dnd_enabled = self._enable_model_drop()
+        self.source.trace_add('write', lambda *_: self._refresh_hud_model())
+        self._refresh_hud_model()
         self.title(f'Astronyx Mini Forge Studio V{APP_VERSION} • Meshy → TaleSpire')
         if os.name == 'nt':
             try:
@@ -234,13 +242,12 @@ class Studio(UpdateInterface, legacy.Forge):
 
         self.nav_buttons = {}
         self.nav_indicators = {}
+        tk.Label(sidebar,text='ESSENCIAL',fg=polish.SUBTLE,bg=SIDEBAR,
+                 font=('Segoe UI',8,'bold')).pack(anchor='w',padx=23,pady=(2,7))
+        self._advanced_nav_container=tk.Frame(sidebar,bg=SIDEBAR)
         for key, icon, label, target in self.NAV:
-            if key in ('home', 'scale'):
-                tk.Label(sidebar,text='WORKSPACE' if key=='home' else 'FERRAMENTAS',
-                         fg=polish.SUBTLE,bg=SIDEBAR,
-                         font=('Segoe UI',8,'bold')).pack(anchor='w',padx=23,
-                         pady=(2,7) if key=='home' else (15,8))
-            row = tk.Frame(sidebar,bg=SIDEBAR)
+            parent=sidebar if key in self.PRIMARY_NAV else self._advanced_nav_container
+            row = tk.Frame(parent,bg=SIDEBAR)
             row.pack(fill='x',padx=11,pady=2)
             indicator=tk.Frame(row,bg=SIDEBAR,width=3)
             indicator.pack(side='left',fill='y')
@@ -251,6 +258,10 @@ class Studio(UpdateInterface, legacy.Forge):
             button.pack(side='left',fill='x',expand=True)
             self.nav_buttons[key]=button
             self.nav_indicators[key]=indicator
+        self.advanced_toggle=RoundedNavButton(
+            sidebar,text='▸   Mais opções',
+            command=self._toggle_advanced_tools,width=188)
+        self.advanced_toggle.pack(fill='x',padx=14,pady=(14,3))
 
         footer=tk.Frame(sidebar,bg=SIDEBAR)
         footer.pack(side='bottom',fill='x',padx=17,pady=(0,21))
@@ -380,7 +391,41 @@ class Studio(UpdateInterface, legacy.Forge):
         if selected==str(self.tab_library):
             self.refresh_library()
 
+    def _toggle_advanced_tools(self):
+        self._advanced_open=not self._advanced_open
+        if self._advanced_open:
+            self._advanced_nav_container.pack(fill='x',pady=(2,6))
+        else:
+            self._advanced_nav_container.pack_forget()
+        self.advanced_toggle.configure(
+            text=('▾   Menos opções' if self._advanced_open else '▸   Mais opções'))
+
+    def _enable_model_drop(self):
+        """Optional native Windows drag/drop with safe file-picker fallback."""
+        return register_file_drop(self, self.hud_drop_widgets,
+                                  self._handle_model_drop)
+
+    def _handle_model_drop(self, event):
+        try:
+            model=parse_dropped_model(event.data, self.tk.splitlist)
+            self._set_model_source(model)
+            self._navigate('home','tab_dashboard')
+        except ValueError as exc:
+            messagebox.showwarning('Arquivo Meshy inválido',str(exc))
+        return 'break'
+
+    def _refresh_hud_model(self):
+        if hasattr(self, 'hud_drop_filename'):
+            value=self.source.get()
+            self.hud_drop_filename.set(
+                Path(value).name if value else 'Nenhum arquivo selecionado')
+        if hasattr(self,'hud_generate_button') and not self.busy:
+            self.hud_generate_button.configure(
+                state='normal' if self.source.get() else 'disabled')
+
     def _navigate(self, key, target):
+        if key not in self.PRIMARY_NAV and not self._advanced_open:
+            self._toggle_advanced_tools()
         self.tabs.select(getattr(self, target))
         self._tab_switched()
 
@@ -542,6 +587,9 @@ class Studio(UpdateInterface, legacy.Forge):
     def _read_log(self):
         previously_busy = self.busy
         super()._read_log()
+        if hasattr(self,'hud_generate_button'):
+            self.hud_generate_button.configure(
+                state='disabled' if self.busy or not self.source.get() else 'normal')
         if previously_busy and not self.busy:
             self.refresh_library()
 
