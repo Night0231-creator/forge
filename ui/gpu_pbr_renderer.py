@@ -284,11 +284,11 @@ def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
     if len(mesh.triangles)>4500:
         img=draw_fast(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
                       show_reference,1.75)
-        backend='CPU · prévia rápida colorida'
+        backend='CPU · Albedo rápido colorido'
     else:
         img=draw(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
                  False,show_reference,1.75)
-        backend='CPU · textura Albedo'
+        backend='CPU · Albedo texturizado'
     reason=getattr(_THREAD,'gpu_error',None)
     if reason and not force_cpu:
         backend+=' · OpenGL indisponível: '+reason[:63]
