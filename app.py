@@ -905,13 +905,24 @@ class Forge(tk.Tk):
         else:
             messagebox.showerror('Exemplo não encontrado', str(sample))
 
+    def _set_model_source(self, model_path):
+        """Single file selection path for drag-and-drop and browse."""
+        file = Path(str(model_path)).expanduser()
+        if not file.is_file() or file.suffix.lower() not in SUPPORTED:
+            raise ValueError('Selecione um arquivo GLB, ZIP ou modelo 3D válido do Meshy.')
+        self.name.set(safe_slug(file.stem))
+        self.source.set(str(file.resolve()))
+        self.message.set('Modelo importado: ' + file.name + '. Pronto para gerar.')
+        self._update_output_preview()
+
     def _pick_source(self):
         result = filedialog.askopenfilename(title='Escolher arquivo 3D do Meshy',
                    filetypes=[('Modelos 3D', '*.blend *.glb *.gltf *.fbx *.obj *.stl *.zip'), ('Todos os arquivos', '*.*')])
         if result:
-            self.source.set(result)
-            if not self.name.get():
-                self.name.set(safe_slug(Path(result).stem))
+            try:
+                self._set_model_source(result)
+            except ValueError as error:
+                messagebox.showwarning('Arquivo inválido', str(error))
 
     def _update_output_preview(self):
         root = self.target.get().strip().strip('"')
