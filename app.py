@@ -30,6 +30,7 @@ from core.scale_audit import audit_scale
 from core.footprint_calibrator import (analyze_footprint, find_project_obj,
                                        write_calibration_report)
 from ui.calibration_dialog import show_calibration
+from ui.painting_studio import open_painting_studio
 from core.quality_notes import quality_notes
 from core.taleweaverlite_handoff import prepare_taleweaverlite_handoff
 from core.unity_bridge import (find_unity_editor, find_taleweaverlite_project,
@@ -274,6 +275,7 @@ class Forge(tk.Tk):
                                               accent=True, padx=18, pady=14)
         self.quick_convert_btn.pack(side='left', padx=(0, 10))
         self._button(actions, 'Abrir resultado', self._open_result, padx=13, pady=14).pack(side='left')
+        self._button(actions, 'PINTAR MINIATURA', self._paint_last, padx=13, pady=14).pack(side='left',padx=(9,0))
         ttk.Progressbar(body, variable=self.progress, maximum=100,
                         style='Forge.Horizontal.TProgressbar').pack(fill='x', pady=(17, 9))
         tk.Label(body, textvariable=self.message, bg=PANEL, fg=FG,
@@ -427,6 +429,7 @@ class Forge(tk.Tk):
         self._button(top,'Abrir OBJ preparado',self._choose_preview_obj,accent=True).pack(side='left',padx=(0,8))
         self._button(top,'Último personagem',self._preview_last).pack(side='left',padx=(0,8))
         self._button(top,'Calibrar 1×1',self._calibrate_1x1).pack(side='left',padx=(0,8))
+        self._button(top,'Pintar textura UV',self._paint_last,accent=True).pack(side='left',padx=(0,8))
         self._button(top,'Restaurar câmera',lambda: self.viewer.reset()).pack(side='left')
         self._label(holder,'Prévia geométrica 3D (sem texturas). Gire com o mouse e use a roda para zoom. '
                           'O retrato ao lado é renderizado pelo Blender com as texturas.',
@@ -446,6 +449,21 @@ class Forge(tk.Tk):
                  justify='left',anchor='nw',wraplength=255,font=('Segoe UI',10)).pack(fill='x',padx=12)
         self._label(holder,'O tamanho recomendado é uma estimativa baseada no seu teste, não uma '
                   'escala oficial. Confira a miniatura no TaleSpire.',bg=BG,wraplength=900).pack(anchor='w',pady=(10,0))
+
+    def _paint_last(self):
+        if self.busy:
+            messagebox.showinfo('Conversão em andamento','Finalize a conversão primeiro.'); return
+        project=self.last_output
+        if not project or not Path(project).is_dir():
+            root=Path(self.target.get()).expanduser()
+            candidate=root/safe_slug(self.name.get())
+            if (candidate/'TaleWeaverCmd_Source').is_dir(): project=candidate
+            else:
+                selected=filedialog.askdirectory(title='Pasta da miniatura',initialdir=str(root) if root.is_dir() else str(Path.home()))
+                if not selected: return
+                project=Path(selected)
+        try: open_painting_studio(self,project)
+        except (ValueError,OSError) as error: messagebox.showerror('Pintura indisponível',str(error))
 
     def _calibrate_1x1(self):
         """Inspect final TaleWeaverCmd OBJ, not the imported Meshy source."""
