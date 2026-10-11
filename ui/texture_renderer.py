@@ -30,6 +30,7 @@ class TextureMesh:
     texcoords: np.ndarray
     texture_path: Path
     limited: bool = False
+    normals: np.ndarray | None = None
 
 
 def albedo_for(obj: Path) -> Path | None:
@@ -51,6 +52,9 @@ def load_obj(path: Path, limit: int = MAX_TRIANGLES) -> TextureMesh:
     if tex is None:
         raise PreviewError('Não foi encontrada a textura Albedo.png ao lado do OBJ.')
     vertices, uvs, faces, face_uvs = [], [], [], []
+    normals,face_normals,face_groups=[],[],[]
+    smoothing=0
+    group_ids={}
     clipped = False
 
     def index(raw: str, size: int) -> int:
@@ -74,6 +78,18 @@ def load_obj(path: Path, limit: int = MAX_TRIANGLES) -> TextureMesh:
                     uv = tuple(float(x) for x in parts[1:3])
                     if all(math.isfinite(x) for x in uv):
                         uvs.append(uv)
+            elif line.startswith('vn '):
+                parts=line.split()
+                try:
+                    normal=tuple(float(x) for x in parts[1:4])
+                    if len(normal)!=3 or not all(math.isfinite(x) for x in normal):
+                        normal=(0.,0.,0.)
+                except ValueError:
+                    normal=(0.,0.,0.)
+                normals.append(normal)
+            elif line.startswith('s '):
+                name=line.split()[1] if len(line.split())>1 else 'off'
+                smoothing=0 if name in ('off','0') else group_ids.setdefault(name,len(group_ids)+1)
             elif line.startswith('f '):
                 parts = line.split()[1:]
                 try:
@@ -81,6 +97,13 @@ def load_obj(path: Path, limit: int = MAX_TRIANGLES) -> TextureMesh:
                                 index(p.split('/')[1], len(uvs))) for p in parts]
                 except (IndexError, ValueError, KeyError):
                     continue
+                imported=[]
+                for part in parts:
+                    pieces=part.split('/')
+                    try:
+                        imported.append(normals[index(pieces[2],len(normals))])
+                    except (IndexError,ValueError):
+                        imported.append((0.,0.,0.))
                 for k in range(1, len(corners)-1):
                     if len(faces) >= limit:
                         clipped = True
@@ -88,15 +111,20 @@ def load_obj(path: Path, limit: int = MAX_TRIANGLES) -> TextureMesh:
                     tri = (corners[0], corners[k], corners[k+1])
                     faces.append(tuple(t[0] for t in tri))
                     face_uvs.append(tuple(uvs[t[1]] for t in tri))
+                    face_normals.append((imported[0],imported[k],imported[k+1]))
+                    face_groups.append(smoothing)
                 if clipped:
                     break
     if not vertices or not faces:
         raise PreviewError('O OBJ não possui faces com coordenadas UV válidas.')
+    points=np.asarray(vertices,dtype=np.float32)
+    triangles=np.asarray(faces,dtype=np.int32)
+    from .mesh_normals import corner_normals
     return TextureMesh(
-        np.asarray(vertices, dtype=np.float32),
-        np.asarray(faces, dtype=np.int32),
+        points,
+        triangles,
         np.asarray(face_uvs, dtype=np.float32),
-        tex, clipped
+        tex, clipped,corner_normals(points,triangles,face_normals,face_groups)
     )
 
 

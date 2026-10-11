@@ -19,9 +19,9 @@ class SurfacePaintingSourceTests(unittest.TestCase):
 
     def test_app_version_consistency(self):
         from core.version import APP_VERSION
-        self.assertEqual(APP_VERSION,'5.1.1')
+        self.assertEqual(APP_VERSION,'5.2.0')
         cli=(ROOT/'studio.py').read_text(encoding='utf-8')
-        self.assertIn('Astronyx Mini Forge Studio 5.1.1',cli)
+        self.assertIn('Astronyx Mini Forge Studio 5.2.0',cli)
 
 
 if __name__ == '__main__':

@@ -72,7 +72,7 @@ def prepare_example(destination):
     return project
 
 
-def capture(project, output, width=1440, height=880, page='editor'):
+def capture(project, output, width=1440, height=880, page='editor', inspector='paint'):
     project=Path(project).resolve() if project else None
     entry=Miniature(folder=project,name=project.name,tsmod=None,thumbnail=None,
                     obj=find_project_obj(project),updated_at=project.stat().st_mtime) if project else None
@@ -105,6 +105,8 @@ def capture(project, output, width=1440, height=880, page='editor'):
             editor=window.workspace.workspace_editor
             if page=='editor' and editor is None:
                 raise RuntimeError('Painting editor did not open.')
+            if editor and page=='editor':
+                editor.tool_tabs.select(('paint','material','layers','view').index(inspector))
             deadline=time.monotonic()+12
             ready=False
             while time.monotonic()<deadline:
@@ -148,6 +150,7 @@ if __name__=='__main__':
     parser.add_argument('--project')
     parser.add_argument('--example',action='store_true')
     parser.add_argument('--page',choices=('editor','welcome','import','library'),default='editor')
+    parser.add_argument('--inspector',choices=('paint','material','layers','view'),default='paint')
     parser.add_argument('--output',required=True)
     parser.add_argument('--width',type=int,default=1440)
     parser.add_argument('--height',type=int,default=880)
@@ -157,6 +160,6 @@ if __name__=='__main__':
         parser.error('An editor capture requires --project or --example.')
     if args.example:
         with tempfile.TemporaryDirectory(prefix='Astronyx-Example-QA-') as tmp:
-            capture(prepare_example(tmp),args.output,args.width,args.height,args.page)
+            capture(prepare_example(tmp),args.output,args.width,args.height,args.page,args.inspector)
     else:
-        capture(args.project,args.output,args.width,args.height,args.page)
+        capture(args.project,args.output,args.width,args.height,args.page,args.inspector)

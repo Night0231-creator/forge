@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V5.1.1.
+"""Astronyx Mini Forge Studio V5.2.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -685,6 +685,31 @@ def run_packaged_selftest(report_file: str) -> int:
         result['checked']['surface_paint_packaged']=False
         result['surface_error']=str(exc)
     try:
+        import tempfile
+        from PIL import Image
+        from core.layered_materials import LayeredPaintSession
+        from core.material_palette import MATERIALS
+        from ui.material_tiles import material_swatch
+        from ui.mesh_normals import corner_normals
+        result['checked']['material_palette_packaged']=all(
+            material_swatch(choice).size==(48,48) for choice in MATERIALS)
+        normals=corner_normals(sample.points,sample.triangles,
+                               [[[0,0,1]]*3],[0])
+        result['checked']['mesh_normals_packaged']=normals.shape==(1,3,3)
+        with tempfile.TemporaryDirectory(prefix='Astronyx-Material-QA-') as tmp:
+            project=Path(tmp)
+            (project/'TaleWeaverCmd_Source').mkdir()
+            folder=project/'TaleWeaverLite';folder.mkdir()
+            Image.new('RGBA',(32,32),'white').save(folder/'Albedo.png')
+            Image.new('RGBA',(32,32),(0,127,0,0)).save(folder/'MAES.png')
+            session=LayeredPaintSession(folder/'Albedo.png',project)
+            session.stroke((16,16),(16,16),'#FFC000',material=(230,60,210))
+            result['checked']['material_brush_packaged']=(
+                session.maes_image.getpixel((16,16))==(230,127,60,210))
+    except Exception as exc:
+        result['checked']['material_brush_packaged']=False
+        result['material_error']=str(exc)
+    try:
         from ui.realtime_viewer import RealtimeObjViewer
         from pyopengltk import OpenGLFrame
         from OpenGL import GL
@@ -714,7 +739,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 5.1.1')
+            print('Astronyx Mini Forge Studio 5.2.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''

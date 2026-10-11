@@ -67,9 +67,11 @@ void main() {
         vec3 dx=dFdx(v_eye),dy=dFdy(v_eye);
         vec2 duv1=dFdx(v_uv),duv2=dFdy(v_uv);
         vec3 T=dx*duv2.y-dy*duv1.y;
-        T=normalize(T - N*dot(T,N));
-        vec3 B=normalize(cross(N,T))*sign(duv1.x*duv2.y-duv1.y*duv2.x);
-        if (length(T)>0.5 && length(B)>0.5) {
+        float det=duv1.x*duv2.y-duv1.y*duv2.x;
+        T=(T - N*dot(T,N))*sign(det);
+        if (abs(det)>1e-9 && dot(T,T)>1e-12) {
+            T=normalize(T);
+            vec3 B=normalize(cross(N,T))*sign(det);
             vec3 normalData=texture(u_normalmap,v_uv).rgb*2.0-1.0;
             N=normalize(mat3(T,B,N)*normalData);
         }
@@ -103,9 +105,18 @@ void main() {
     vec3 env_diffuse=color*(1.0-metallic)*hemisphere;
     vec3 env_reflect=F0*hemisphere*(1.0-roughness*.65);
     vec3 ambient=(env_diffuse+env_reflect*.7)*u_ambient*max(.12,ao);
+    // Analytic studio softboxes give metal a broad reflection without HDR
+    // downloads, ray tracing, extra framebuffers or a continuous render loop.
+    vec3 R=reflect(-V,N);
+    float softbox=pow(max(dot(R,normalize(vec3(-.68,.32,.66))),0.0),
+                      mix(28.0,3.0,roughness));
+    float strip=pow(max(dot(R,normalize(vec3(.45,.68,.58))),0.0),
+                    mix(70.0,6.0,roughness));
+    vec3 reflection=F0*(u_sky_tint*softbox*.9+vec3(1.0)*strip*1.3)
+                    *(1.0-roughness*.7)*u_light;
     // Broad fill keeps backlit miniatures legible without a second shadow map.
     float fill=max(dot(N,normalize(vec3(-.65,.25,-.34))),0.0);
-    vec3 lit=ambient+(diffuse+spec)*NdotL*u_light*2.1
+    vec3 lit=ambient+reflection+(diffuse+spec)*NdotL*u_light*2.1
              +diffuse*hemisphere*fill*u_light*.22;
     // TaleSpire can condition emission on its own paint-wash settings.
     vec3 emitted=color*maes.b*u_emission;
@@ -116,17 +127,21 @@ void main() {
 
 
 def _mesh_buffer(mesh) -> np.ndarray:
-    """Interleaved triangle vertices: position 3 + UV 2 + flat normal 3."""
+    """Position 3 + UV 2 + imported/smoothing-group normal 3."""
     points=np.asarray(mesh.points,dtype=np.float32)
     indices=np.asarray(mesh.triangles,dtype=np.int32)
     if not len(indices) or len(indices)>MAX_TRIANGLES:
         raise ValueError('Malha fora do limite da prévia.')
     tris=points[indices]
-    normals=np.cross(tris[:,1]-tris[:,0],tris[:,2]-tris[:,0])
-    magnitude=np.maximum(np.linalg.norm(normals,axis=1,keepdims=True),1e-8)
-    normals/=magnitude
+    normals=getattr(mesh,'normals',None)
+    if normals is None:
+        normals=np.cross(tris[:,1]-tris[:,0],tris[:,2]-tris[:,0])
+        magnitude=np.maximum(np.linalg.norm(normals,axis=1,keepdims=True),1e-8)
+        normals=np.broadcast_to((normals/magnitude)[:,None,:],tris.shape)
+    elif normals.shape!=tris.shape or not np.isfinite(normals).all():
+        raise ValueError('Normais da prévia inválidas.')
     joined=np.concatenate((tris,np.asarray(mesh.texcoords,dtype=np.float32),
-                           np.broadcast_to(normals[:,None,:],tris.shape)),axis=2)
+                           normals),axis=2)
     return np.ascontiguousarray(joined.reshape(-1,8),dtype=np.float32)
 
 

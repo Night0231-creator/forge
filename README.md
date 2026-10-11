@@ -1,4 +1,16 @@
-# Astronyx Mini Forge Studio V5.1.1 — edição sem bloquear a interface
+# Astronyx Mini Forge Studio V5.2.0 — cor e material no mesmo pincel
+
+A biblioteca visual oferece **aço, ouro, bronze, ferro, couro, tecido, pele, pedra, cristal, chama, gelo e esmalte**. Escolha um material na aba **Material**, ajuste a cor e pinte no 3D: pincel, balde e carimbo aplicam cor, metal, emissão e suavidade com a mesma cobertura. A opção **Pintar acabamento junto da cor** permite controlar esse comportamento. A oclusão existente no modelo é preservada durante os traços; a aplicação explícita na seleção continua oferecendo os quatro canais MAES.
+
+- A cor e o acabamento participam do mesmo desfazer/refazer e são restaurados ao reabrir o rascunho. O material continua usando o atlas MAES do projeto; sua visibilidade/opacidade não pertence às camadas de cor.
+- O balde identifica a parte clicada a cada preenchimento automático. Uma seleção criada com a ferramenta Região permanece ativa até você limpá-la.
+- O viewport respeita as normais e os grupos de suavização do OBJ, incluindo arestas e costuras UV. Reflexos de luzes de estúdio dão mais definição aos metais com o mesmo passe de renderização.
+- Propriedades e biblioteca ficam à esquerda, com a miniatura em uma área ampla à direita.
+- Atualizações de material usam pequenas áreas da textura, assim como as atualizações de cor. O canal A da MAES guarda suavidade e é redimensionado como dado, sem transparência premultiplicada.
+
+O detalhe da superfície depende da geometria e do normal map importados. Esta versão aproxima o fluxo de pintura da referência [Basecoat](https://store.steampowered.com/app/4468700/Basecoat_Mini_Painting_Studio/). A geração automática de sombras/destaques, o halo de emissão e a preparação completa de STL da referência ainda são diferenças entre os programas.
+
+## Edição em segundo plano
 
 Pincel 3D/UV, seleção, camadas, materiais, desfazer/refazer e salvamento agora passam por uma fila de edição em segundo plano. Os comandos respeitam a ordem dos traços: salvar ou desfazer durante a pintura aguarda o trabalho anterior sem bloquear a janela.
 
@@ -6,15 +18,15 @@ Pincel 3D/UV, seleção, camadas, materiais, desfazer/refazer e salvamento agora
 - Seleção por cor usa preenchimento por linhas, mantendo a tolerância RGB e a região conectada.
 - A interface recebe cópias da prévia de até 2K e pequenas áreas alteradas. Os cálculos e a redução de texturas 4K ficam no trabalhador de edição; a textura exportada mantém sua resolução original.
 - Na prévia compatível, mover o cursor não reinicia o render e os quadros de pintura podem aparecer durante o traço. As atualizações da textura também são parciais.
-- O visual V5.1 permanece: ferramentas laterais, propriedades à direita, paleta visual, atalhos e galeria com botão **Pintar**.
+- Ferramentas laterais, paleta visual, atalhos e galeria com botão **Pintar**.
 
 O 3D nativo usa OpenGL 3.3 e redesenha sob demanda, ficando ocioso quando nada muda. Perfis **Auto**, **Leve** e **Alta**, com metas de **30 ou 60 FPS**, estão na aba **Exibir**. Há uma prévia compatível automática quando o driver não oferece OpenGL 3.3. O FPS efetivo depende do modelo, da GPU e do driver. A prévia aceita até 150 mil triângulos; a edição não decima o modelo original.
 
 Validação de pixels e comandos: `python -m unittest discover -s tests -v`. Janela real: `python tools/validate_native_viewport.py --report dist/validation-native-window.json`.
 
-Teste de latência com 145.800 faces e textura 4096 × 4096: `python tools/validate_editing_latency.py --report dist/validation-editing.json`. Verifica a resposta da interface enquanto pinta, seleciona por geometria/cor, desfaz, refaz e salva. Executa tanto o viewport nativo quanto a prévia compatível quando há OpenGL 3.3; mede latência da interface, não promete um FPS para todo computador. Os arquivos originais são conferidos no fim. Para exigir o viewport nativo, acrescente `--require-native`.
+Teste de latência com 145.800 faces e textura 4096 × 4096: `python tools/validate_editing_latency.py --report dist/validation-editing.json`. Verifica a resposta da interface enquanto pinta cor e material, preserva a oclusão, seleciona por geometria/cor, desfaz, refaz e salva os dois mapas. Executa tanto o viewport nativo quanto a prévia compatível quando há OpenGL 3.3; mede latência da interface, não promete um FPS para todo computador. Os arquivos originais são conferidos no fim. Para exigir o viewport nativo, acrescente `--require-native`.
 
-Capturas reproduzíveis: `python tools/capture_studio_ui.py --example --output dist/studio.png`. Use `--page welcome`, `--page import`, `--page library` ou `--width 1120 --height 720`.
+Capturas reproduzíveis: `python tools/capture_studio_ui.py --example --output dist/studio.png`. Use `--inspector material`, `--page welcome`, `--page import`, `--page library` ou `--width 1120 --height 720`.
 
 A distribuição Windows inclui as dependências de renderização. Blender e TaleWeaverCmd continuam responsáveis pelas conversões/exportações existentes.
 
@@ -28,7 +40,7 @@ A distribuição Windows inclui as dependências de renderização. Blender e Ta
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.1.1-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.2.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -37,7 +49,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v5.1.1.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v5.2.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 

@@ -115,6 +115,8 @@ class LayeredPaintSession(PaintSession):
                 self.maes_image = self.material_original.copy()
         from ui.realtime_policy import TextureDamage
         self.preview_damage = TextureDamage(self.image.size)
+        self.material_damage = (None if self.maes_image is None else
+                                TextureDamage(self.maes_image.size))
         self.restored_layers = self._restore_layers()
         self._compose()
 
@@ -157,6 +159,8 @@ class LayeredPaintSession(PaintSession):
 
     def _restore(self, snapshot):
         self.layers, self.active_layer, self.selection, self.maes_image, self.maes_dirty = snapshot
+        if self.material_damage is not None:
+            self.material_damage.mark()
         self._compose()
 
     def checkpoint(self):
@@ -233,9 +237,11 @@ class LayeredPaintSession(PaintSession):
         self.selection = None
 
     def _apply_mask(self, mask: Image.Image, xy: tuple[int,int], color: str,
-                    opacity: float, erase: bool = False):
+                    opacity: float, erase: bool = False, material=None):
         if not math.isfinite(opacity) or not 0 < opacity <= 1:
             raise ValueError('Opacidade inválida.')
+        if material is not None and not erase:
+            self._validate_finish(material)
         if self.selection is not None:
             mask = ImageChops.multiply(mask, self.selection.crop(
                 (xy[0],xy[1],xy[0]+mask.width,xy[1]+mask.height)))
@@ -254,6 +260,8 @@ class LayeredPaintSession(PaintSession):
             pigment.putalpha(mask)
             part = Image.alpha_composite(part,pigment)
         layer.pixels.paste(part,box)
+        if material is not None and not erase:
+            self._paint_finish(mask,xy,material)
         # Painting changes a small atlas rectangle: full compositing here
         # previously copied every pixel of every layer on each mouse motion.
         region=mask.getbbox()
@@ -264,7 +272,7 @@ class LayeredPaintSession(PaintSession):
 
     def stroke(self, start: tuple[int,int], end: tuple[int,int],
                color: str, size: int = 18, opacity: float = 1.,
-               erase: bool = False, hardness: float = 1.):
+               erase: bool = False, hardness: float = 1., material=None):
         if not isinstance(size,int) or not 1 <= size <= 256:
             raise ValueError('Pincel deve ter tamanho 1–256.')
         radius = max(1,size//2)
@@ -279,10 +287,10 @@ class LayeredPaintSession(PaintSession):
         gx,gy=np.meshgrid(np.arange(left,right),np.arange(top,bottom))
         mask=Image.fromarray(np.rint(255*coverage(
             segment_distance(gx,gy,start,end),radius,hardness)).astype(np.uint8))
-        self._apply_mask(mask,(left,top),color,opacity,erase)
+        self._apply_mask(mask,(left,top),color,opacity,erase,material)
 
     def apply_surface_masks(self, patches, color: str, opacity: float = 1.,
-                            erase: bool = False):
+                            erase: bool = False, material=None):
         """Merge face patches by maximum coverage before painting atlas tiles.
 
         Adjacent triangles share boundary texels: applying independently would
@@ -308,11 +316,11 @@ class LayeredPaintSession(PaintSession):
                     source=(box[0]-x,box[1]-y,box[2]-x,box[3]-y)
                     tile.paste(ImageChops.lighter(tile.crop(target),mask.crop(source)),target)
         for origin,mask in tiles.items():
-            self._apply_mask(mask,origin,color,opacity,erase)
+            self._apply_mask(mask,origin,color,opacity,erase,material)
 
     def stamp(self, x: int, y: int, color: str, diameter: int = 48,
               opacity: float = 1.0, shape: str = 'Estrela',
-              custom: Image.Image | None = None):
+              custom: Image.Image | None = None, material=None):
         """Stamp a color-tinted 2D mask onto the current Albedo layer.
 
         Works with a picked 3D surface UV or directly on the atlas. Uses the
@@ -333,12 +341,51 @@ class LayeredPaintSession(PaintSession):
             return
         tile=mask.crop((clipped[0]-left,clipped[1]-top,
                         clipped[2]-left,clipped[3]-top))
-        self._apply_mask(tile,(clipped[0],clipped[1]),color,opacity)
+        self._apply_mask(tile,(clipped[0],clipped[1]),color,opacity,material=material)
 
-    def bucket(self, x: int, y: int, color: str, tolerance: int = 12):
+    def bucket(self, x: int, y: int, color: str, tolerance: int = 12, material=None):
         mask = self.selection if self.selection is not None else _flood_mask(
             self.image,(x,y),tolerance)
-        self._apply_mask(mask,(0,0),color,1.0)
+        self._apply_mask(mask,(0,0),color,1.0,material=material)
+
+    def _validate_finish(self, values):
+        if len(values) != 3 or any(type(v) is not int or not 0 <= v <= 255 for v in values):
+            raise ValueError('Metal, emissão e suavidade devem ficar entre 0 e 255.')
+        if self.maes_image is None:
+            raise FileNotFoundError('Converta a miniatura para preparar os materiais.')
+
+    def _paint_finish(self, mask, xy, values):
+        """Blend MAES data with the pigment's coverage, retaining baked AO.
+
+        Channel A is smoothness, never visual alpha. Handle atlases with
+        different resolutions using globally aligned nearest mask sampling.
+        """
+        mw,mh=self.maes_image.size
+        aw,ah=self.image.size
+        x,y=xy
+        if (mw,mh)==(aw,ah):
+            box=(x,y,x+mask.width,y+mask.height)
+        else:
+            box=(max(0,math.floor(x*mw/aw)),max(0,math.floor(y*mh/ah)),
+                 min(mw,math.ceil((x+mask.width)*mw/aw)),
+                 min(mh,math.ceil((y+mask.height)*mh/ah)))
+            xs=np.floor((np.arange(box[0],box[2])+.5)*aw/mw).astype(int)-x
+            ys=np.floor((np.arange(box[1],box[3])+.5)*ah/mh).astype(int)-y
+            valid=(ys[:,None]>=0)&(ys[:,None]<mask.height)&(xs>=0)&(xs<mask.width)
+            data=np.asarray(mask)[np.clip(ys,0,mask.height-1)[:,None],
+                                  np.clip(xs,0,mask.width-1)]
+            mask=Image.fromarray(np.where(valid,data,0).astype(np.uint8))
+        if not mask.getbbox():
+            return
+        old=self.maes_image.crop(box)
+        ao=old.getchannel('G')
+        target=Image.merge('RGBA',(Image.new('L',mask.size,values[0]),ao,
+                                   Image.new('L',mask.size,values[1]),
+                                   Image.new('L',mask.size,values[2])))
+        # Pillow composite mixes each data channel independently.
+        self.maes_image.paste(Image.composite(target,old,mask),box)
+        self.maes_dirty=True
+        self.material_damage.mark(box)
 
     def apply_material(self, name: str):
         """Modify MAES *data* channels ONLY within an explicit selected region."""
@@ -361,6 +408,7 @@ class LayeredPaintSession(PaintSession):
         value=Image.new('RGBA',self.maes_image.size,tuple(values))
         self.maes_image=Image.composite(value,self.maes_image,coverage)
         self.maes_dirty = True
+        self.material_damage.mark()
 
     def save_draft(self, project: str | Path) -> Path:
         out = super().save_draft(project)
