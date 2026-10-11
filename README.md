@@ -1,25 +1,22 @@
-# Astronyx Mini Forge Studio V5.1 — estúdio redesenhado
+# Astronyx Mini Forge Studio V5.1.1 — edição sem bloquear a interface
 
-O estúdio ganhou uma interface consistente: barra vertical de ferramentas, propriedades à direita, paleta visual e uma área 3D ampla. A tela inicial, a importação e os projetos usam o mesmo tema escuro.
+Pincel 3D/UV, seleção, camadas, materiais, desfazer/refazer e salvamento agora passam por uma fila de edição em segundo plano. Os comandos respeitam a ordem dos traços: salvar ou desfazer durante a pintura aguarda o trabalho anterior sem bloquear a janela.
 
-- **Pintar** na galeria abre a miniatura no editor integrado, com proteção das edições atuais ao trocar de projeto.
-- Ferramentas com ícones vetoriais, dicas ao passar o mouse e atalhos: **B** pincel, **G** preenchimento, **S** carimbo, **R** região, **I** conta-gotas, **E** borracha, **F** enquadrar. **[ / ]** ajustam o pincel; **Ctrl+S**, **Ctrl+Z** e **Ctrl+Shift+Z** salvam, desfazem e refazem. Os atalhos respeitam os campos de texto.
-- Painéis de propriedades e importação têm rolagem; a janela mínima continua em 1120 × 720.
+- Projeção do pincel calculada em lotes NumPy de tamanho limitado; a pintura continua atravessando ilhas UV e respeitando a face visível, o carimbo, a suavidade e a seleção.
+- Seleção por cor usa preenchimento por linhas, mantendo a tolerância RGB e a região conectada.
+- A interface recebe cópias da prévia de até 2K e pequenas áreas alteradas. Os cálculos e a redução de texturas 4K ficam no trabalhador de edição; a textura exportada mantém sua resolução original.
+- Na prévia compatível, mover o cursor não reinicia o render e os quadros de pintura podem aparecer durante o traço. As atualizações da textura também são parciais.
+- O visual V5.1 permanece: ferramentas laterais, propriedades à direita, paleta visual, atalhos e galeria com botão **Pintar**.
 
-O 3D continua sendo apresentado diretamente por OpenGL, sem baixar cada quadro para uma imagem Tk. Pintura, camadas, materiais e exportação mantêm os dados locais.
+O 3D nativo usa OpenGL 3.3 e redesenha sob demanda, ficando ocioso quando nada muda. Perfis **Auto**, **Leve** e **Alta**, com metas de **30 ou 60 FPS**, estão na aba **Exibir**. Há uma prévia compatível automática quando o driver não oferece OpenGL 3.3. O FPS efetivo depende do modelo, da GPU e do driver. A prévia aceita até 150 mil triângulos; a edição não decima o modelo original.
 
-- Perfis **Auto**, **Leve** e **Alta**, com metas de **30 ou 60 FPS** na aba **Exibir**. O FPS efetivo depende do modelo, da GPU e do driver.
-- Redesenho sob demanda: a área 3D fica ociosa quando nada muda.
-- Textura de prévia de até 2K (1K no perfil Leve); somente as áreas alteradas são enviadas durante o traço. A textura de exportação mantém sua resolução original.
-- Cursor com tamanho do pincel e pintura alinhada ao viewport inteiro, inclusive acima de 900 pixels.
-- Prévia compatível automática se o driver não disponibilizar OpenGL 3.3. Desmarcar **Usar prévia GPU** também ativa esse caminho.
-- O limite anterior de 150 mil triângulos da prévia permanece; modelos maiores devem ser preparados/otimizados antes da pintura. Não há decimação destrutiva feita pelo viewport.
+Validação de pixels e comandos: `python -m unittest discover -s tests -v`. Janela real: `python tools/validate_native_viewport.py --report dist/validation-native-window.json`.
 
-Validação: `python -m unittest discover -s tests -v`; janela real: `python tools/validate_native_viewport.py --report dist/validation-native-window.json`. Em uma máquina OpenGL 3.3, acrescente `--require-native`. O teste verifica pintura, desfazer, redimensionamento, ociosidade, troca de backend e preservação dos arquivos originais.
+Teste de latência com 145.800 faces e textura 4096 × 4096: `python tools/validate_editing_latency.py --report dist/validation-editing.json`. Verifica a resposta da interface enquanto pinta, seleciona por geometria/cor, desfaz, refaz e salva. Executa tanto o viewport nativo quanto a prévia compatível quando há OpenGL 3.3; mede latência da interface, não promete um FPS para todo computador. Os arquivos originais são conferidos no fim. Para exigir o viewport nativo, acrescente `--require-native`.
 
-Capturas reproduzíveis da interface: `python tools/capture_studio_ui.py --example --output dist/studio.png`. Use `--page welcome`, `--page import` ou `--page library` para as outras telas e `--width 1120 --height 720` para o tamanho mínimo. O exemplo usa o guerreiro de baixa resolução já incluído no projeto, numa pasta temporária.
+Capturas reproduzíveis: `python tools/capture_studio_ui.py --example --output dist/studio.png`. Use `--page welcome`, `--page import`, `--page library` ou `--width 1120 --height 720`.
 
-A distribuição Windows inclui as dependências de renderização. Blender e TaleWeaverCmd continuam responsáveis pelas conversões/exportações existentes. Esta atualização não equivale à implementação de todas as funcionalidades do Basecoat.
+A distribuição Windows inclui as dependências de renderização. Blender e TaleWeaverCmd continuam responsáveis pelas conversões/exportações existentes.
 
 ---
 
@@ -31,7 +28,7 @@ A distribuição Windows inclui as dependências de renderização. Blender e Ta
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.1.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.1.1-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -40,7 +37,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v5.1.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v5.1.1.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 

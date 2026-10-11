@@ -14,59 +14,145 @@ from core.brushes import coverage, segment_distance
 MAX_WORK_PIXELS = 32 * 1024 * 1024
 
 
-def _weights(x, y, xs, ys):
-    area = (xs[1]-xs[0])*(ys[2]-ys[0]) - (ys[1]-ys[0])*(xs[2]-xs[0])
-    if abs(float(area)) < 1e-12:
-        return None
-    a = ((xs[1]-x)*(ys[2]-y)-(ys[1]-y)*(xs[2]-x))/area
-    b = ((xs[2]-x)*(ys[0]-y)-(ys[2]-y)*(xs[0]-x))/area
+def _raster_blocks(candidates, bounds, batch=65536):
+    """Raster coordinates in bounded NumPy batches, rather than per face."""
+    x0, y0, x1, y1 = bounds.T
+    widths = x1-x0+1
+    counts = widths*(y1-y0+1)
+    ends = np.cumsum(counts)
+    starts = ends-counts
+    for offset in range(0, int(ends[-1]), batch):
+        index = np.arange(offset, min(offset+batch, int(ends[-1])))
+        face = np.searchsorted(ends, index, side='right')
+        local = index-starts[face]
+        yield candidates[face], x0[face]+local % widths[face], y0[face]+local//widths[face]
+
+
+def _batch_weights(x, y, xs, ys, area):
+    a = ((xs[:,1]-x)*(ys[:,2]-y)-(ys[:,1]-y)*(xs[:,2]-x))/area
+    b = ((xs[:,2]-x)*(ys[:,0]-y)-(ys[:,2]-y)*(xs[:,0]-x))/area
     return a, b, 1-a-b
 
 
-def _clip(vertices, axis, boundary, lower):
-    """Clip x/y/depth/u/v vertices against a screen rectangle edge."""
-    if not len(vertices):
-        return vertices
-    result = []
-    previous = vertices[-1]
-    prev_inside = previous[axis] >= boundary if lower else previous[axis] <= boundary
-    for current in vertices:
-        inside = current[axis] >= boundary if lower else current[axis] <= boundary
-        if inside != prev_inside:
-            ratio = (boundary-previous[axis])/(current[axis]-previous[axis])
-            result.append(previous + ratio*(current-previous))
-        if inside:
-            result.append(current)
-        previous, prev_inside = current, inside
-    return np.asarray(result)
-
-
-def _front_faces(picker, candidates, bounds):
+def _front_batched(picker, candidates, bounds):
     left, top, right, bottom = bounds
-    # Half-pixel screen sampling keeps seams narrow even in a 4K texture.
     width, height = (right-left)*2+1, (bottom-top)*2+1
-    depth = np.full((height, width), -np.inf, dtype=np.float32)
-    front = np.full((height, width), -1, dtype=np.int32)
-    for triangle in candidates:
-        xs, ys = picker.x[triangle], picker.y[triangle]
-        x0 = max(0, int(math.floor((xs.min()-left)*2)))
-        x1 = min(width-1, int(math.ceil((xs.max()-left)*2)))
-        y0 = max(0, int(math.floor((ys.min()-top)*2)))
-        y1 = min(height-1, int(math.ceil((ys.max()-top)*2)))
-        if x1 < x0 or y1 < y0:
-            continue
-        gx, gy = np.meshgrid(np.arange(x0,x1+1)*.5+left,
-                            np.arange(y0,y1+1)*.5+top)
-        bary = _weights(gx, gy, xs, ys)
-        if bary is None:
-            continue
-        a, b, c = bary
-        z = a*picker.depth[triangle,0]+b*picker.depth[triangle,1]+c*picker.depth[triangle,2]
-        section = depth[y0:y1+1,x0:x1+1]
-        inside = (a >= -1e-7)&(b >= -1e-7)&(c >= -1e-7)&(z > section)
-        section[inside] = z[inside]
-        front[y0:y1+1,x0:x1+1][inside] = triangle
-    return front
+    depth = np.full(width*height, -np.inf)
+    front = np.full(width*height, len(picker.x), dtype=np.int32)
+    boxes = np.column_stack((
+        np.maximum(0, np.floor((picker.min_x[candidates]-left)*2)),
+        np.maximum(0, np.floor((picker.min_y[candidates]-top)*2)),
+        np.minimum(width-1, np.ceil((picker.max_x[candidates]-left)*2)),
+        np.minimum(height-1, np.ceil((picker.max_y[candidates]-top)*2)),
+    )).astype(np.int64)
+    for ids, x, y in _raster_blocks(candidates, boxes):
+        a,b,c = _batch_weights(x*.5+left, y*.5+top, picker.x[ids], picker.y[ids], picker.area[ids])
+        inside = (a>=-1e-7)&(b>=-1e-7)&(c>=-1e-7)
+        ids, index = ids[inside], (y*width+x)[inside]
+        z = (a[inside]*picker.depth[ids,0]+b[inside]*picker.depth[ids,1]+c[inside]*picker.depth[ids,2])
+        old = depth[index].copy()
+        np.maximum.at(depth, index, z)
+        # Clear an earlier face only when this batch actually advances depth.
+        front[index[depth[index]>old]] = len(picker.x)
+        winners = z == depth[index]
+        np.minimum.at(front, index[winners], ids[winners])
+    front[front == len(picker.x)] = -1
+    return front.reshape(height,width)
+
+
+def _clipped_bounds(picker, candidates, bounds, size):
+    """UV bounds of a triangle/brush rectangle intersection, in parallel."""
+    left, top, right, bottom = bounds
+    screen = np.stack((picker.x[candidates],picker.y[candidates]),axis=-1)
+    uv = picker.uv[candidates]
+    valid = ((screen[:,:,0]>=left)&(screen[:,:,0]<=right)
+             &(screen[:,:,1]>=top)&(screen[:,:,1]<=bottom))
+    low = np.min(np.where(valid[:,:,None],uv,np.inf),axis=1)
+    high = np.max(np.where(valid[:,:,None],uv,-np.inf),axis=1)
+    following, next_uv = np.roll(screen,-1,axis=1), np.roll(uv,-1,axis=1)
+    for axis, boundary, other_low, other_high in (
+            (0,left,top,bottom),(0,right,top,bottom),
+            (1,top,left,right),(1,bottom,left,right)):
+        delta = following[:,:,axis]-screen[:,:,axis]
+        ratio = (boundary-screen[:,:,axis])/np.where(delta != 0,delta,1)
+        other = screen[:,:,1-axis]+ratio*(following[:,:,1-axis]-screen[:,:,1-axis])
+        inside = (delta!=0)&(ratio>=0)&(ratio<=1)&(other>=other_low)&(other<=other_high)
+        mapped = uv+ratio[:,:,None]*(next_uv-uv)
+        low = np.minimum(low,np.min(np.where(inside[:,:,None],mapped,np.inf),axis=1))
+        high = np.maximum(high,np.max(np.where(inside[:,:,None],mapped,-np.inf),axis=1))
+    for x,y in ((left,top),(left,bottom),(right,top),(right,bottom)):
+        a,b,c = _batch_weights(x,y,picker.x[candidates],picker.y[candidates],picker.area[candidates])
+        inside = (a>=0)&(b>=0)&(c>=0)
+        mapped = a[:,None]*uv[:,0]+b[:,None]*uv[:,1]+c[:,None]*uv[:,2]
+        low = np.minimum(low,np.where(inside[:,None],mapped,np.inf))
+        high = np.maximum(high,np.where(inside[:,None],mapped,-np.inf))
+    valid = np.isfinite(low).all(axis=1)&np.isfinite(high).all(axis=1)
+    candidates, low, high = candidates[valid], low[valid], high[valid]
+    width,height = size
+    boxes = np.column_stack((np.maximum(0,np.floor(low[:,0]*(width-1))),
+                             np.maximum(0,np.floor((1-high[:,1])*(height-1))),
+                             np.minimum(width-1,np.ceil(high[:,0]*(width-1))),
+                             np.minimum(height-1,np.ceil((1-low[:,1])*(height-1))))).astype(np.int64)
+    valid = (boxes[:,2]>=boxes[:,0])&(boxes[:,3]>=boxes[:,1])
+    return candidates[valid], boxes[valid]
+
+
+def _masks_batched(picker,candidates,bounds,start,end,size,radius,hardness,paint_through,stencil):
+    width,height = size
+    uv = picker.uv
+    uv_area = picker.uv_area
+    front_candidates = candidates
+    candidates = candidates[np.abs(uv_area[candidates])>=1e-12]
+    candidates, boxes = _clipped_bounds(picker,candidates,bounds,size)
+    if not len(candidates):
+        return []
+    if int(np.sum((boxes[:,2]-boxes[:,0]+1)*(boxes[:,3]-boxes[:,1]+1))) > MAX_WORK_PIXELS:
+        raise ValueError('Aproxime o modelo ou reduza o pincel para pintar esta área.')
+    front = None if paint_through else _front_batched(picker,front_candidates,bounds)
+    stamp = None if stencil is None else np.asarray(stencil.convert('L'),dtype=np.uint8)
+    left,top,right,bottom = bounds
+    tiles, columns = {}, (width+127)//128
+    for ids,x,y in _raster_blocks(candidates,boxes):
+        a,b,c = _batch_weights(x/(width-1),1-y/(height-1),uv[ids,:,0],uv[ids,:,1],uv_area[ids])
+        px = a*picker.x[ids,0]+b*picker.x[ids,1]+c*picker.x[ids,2]
+        py = a*picker.y[ids,0]+b*picker.y[ids,1]+c*picker.y[ids,2]
+        alpha = (np.ones_like(px) if stamp is not None else
+                 coverage(segment_distance(px,py,start,end),radius,hardness))
+        inside = ((a>=-1e-7)&(b>=-1e-7)&(c>=-1e-7)&(px>=left)&(px<=right)
+                  &(py>=top)&(py<=bottom)&(alpha>0))
+        if front is not None:
+            ix = np.clip(np.rint((px-left)*2).astype(np.int32),0,front.shape[1]-1)
+            iy = np.clip(np.rint((py-top)*2).astype(np.int32),0,front.shape[0]-1)
+            nearest = front[iy,ix]
+            front_ids = np.maximum(nearest,0)
+            f0,f1,f2 = _batch_weights(px,py,picker.x[front_ids],picker.y[front_ids],
+                                    np.where(np.abs(picker.area[front_ids])>1e-12,picker.area[front_ids],1))
+            dz = a*picker.depth[ids,0]+b*picker.depth[ids,1]+c*picker.depth[ids,2]
+            closest = (f0*picker.depth[front_ids,0]+f1*picker.depth[front_ids,1]+f2*picker.depth[front_ids,2])
+            valid_front = (nearest>=0)&(f0>=-1e-6)&(f1>=-1e-6)&(f2>=-1e-6)
+            inside &= ~valid_front | (dz>=closest-1e-6)
+        if stamp is not None:
+            sx,sy = (px-(start[0]-radius))/(radius*2),(py-(start[1]-radius))/(radius*2)
+            inside &= (sx>=0)&(sx<=1)&(sy>=0)&(sy<=1)
+            stamp_x = np.clip(np.rint(sx*(stamp.shape[1]-1)).astype(np.int32),0,stamp.shape[1]-1)
+            stamp_y = np.clip(np.rint(sy*(stamp.shape[0]-1)).astype(np.int32),0,stamp.shape[0]-1)
+            alpha = stamp[stamp_y,stamp_x]/255
+        x,y,alpha = x[inside],y[inside],np.rint(alpha[inside]*255).astype(np.uint8)
+        keys = (y//128)*columns+x//128
+        order = np.argsort(keys)
+        keys,x,y,alpha = keys[order],x[order],y[order],alpha[order]
+        starts = np.flatnonzero(np.r_[True,keys[1:]!=keys[:-1]]) if len(keys) else []
+        for begin,finish in zip(starts,np.r_[starts[1:],len(keys)]):
+            key = int(keys[begin]); tx,ty = (key % columns)*128,(key//columns)*128
+            if key not in tiles:
+                tiles[key] = np.zeros((min(128,height-ty),min(128,width-tx)),dtype=np.uint8)
+            np.maximum.at(tiles[key],(y[begin:finish]-ty,x[begin:finish]-tx),alpha[begin:finish])
+    patches = []
+    for key,data in tiles.items():
+        image = Image.fromarray(data); box = image.getbbox()
+        if box:
+            patches.append((image.crop(box),((key % columns)*128+box[0],(key//columns)*128+box[1])))
+    return patches
 
 
 def surface_masks(picker, start, end, texture_size, diameter=20,
@@ -98,71 +184,5 @@ def surface_masks(picker, start, end, texture_size, diameter=20,
                                 &(np.abs(picker.area) > 1e-8))
     if not len(candidates):
         return []
-    front = None if paint_through else _front_faces(picker,candidates,(left,top,right,bottom))
-    stamp = None if stencil is None else np.asarray(stencil.convert('L'),dtype=np.uint8)
-    patches, work = [], 0
-    for triangle in candidates:
-        uv = picker.uv[triangle]
-        clipped = np.column_stack((picker.x[triangle],picker.y[triangle],
-                                   picker.depth[triangle],uv))
-        for axis,boundary,lower in ((0,left,True),(0,right,False),
-                                    (1,top,True),(1,bottom,False)):
-            clipped = _clip(clipped,axis,boundary,lower)
-        if len(clipped) < 3:
-            continue
-        tx = clipped[:,3]*(width-1)
-        ty = (1-clipped[:,4])*(height-1)
-        x0 = max(0,int(math.floor(tx.min())))
-        x1 = min(width-1,int(math.ceil(tx.max())))
-        y0 = max(0,int(math.floor(ty.min())))
-        y1 = min(height-1,int(math.ceil(ty.max())))
-        if x1 < x0 or y1 < y0:
-            continue
-        work += (x1-x0+1)*(y1-y0+1)
-        if work > MAX_WORK_PIXELS:
-            raise ValueError('Aproxime o modelo ou reduza o pincel para pintar esta área.')
-        us, vs = uv[:,0], uv[:,1]
-        for tile_top in range(y0,y1+1,128):
-            tile_bottom = min(y1+1,tile_top+128)
-            u,v = np.meshgrid(np.arange(x0,x1+1)/(width-1),
-                             1-np.arange(tile_top,tile_bottom)/(height-1))
-            bary = _weights(u,v,us,vs)
-            if bary is None:
-                continue
-            a,b,c = bary
-            inside = (a>=-1e-7)&(b>=-1e-7)&(c>=-1e-7)
-            px = a*picker.x[triangle,0]+b*picker.x[triangle,1]+c*picker.x[triangle,2]
-            py = a*picker.y[triangle,0]+b*picker.y[triangle,1]+c*picker.y[triangle,2]
-            alpha = (np.ones_like(px) if stamp is not None else
-                     coverage(segment_distance(px,py,start,end),radius,hardness))
-            inside &= (px>=left)&(px<=right)&(py>=top)&(py<=bottom)&(alpha>0)
-            if not inside.any():
-                continue
-            if front is not None:
-                ix = np.clip(np.rint((px-left)*2).astype(np.int32),0,front.shape[1]-1)
-                iy = np.clip(np.rint((py-top)*2).astype(np.int32),0,front.shape[0]-1)
-                nearest = front[iy,ix]
-                ids = np.maximum(nearest,0)
-                xs,ys = picker.x[ids],picker.y[ids]
-                area = np.where(np.abs(picker.area[ids])>1e-12,picker.area[ids],1.)
-                f0 = ((xs[...,1]-px)*(ys[...,2]-py)-(ys[...,1]-py)*(xs[...,2]-px))/area
-                f1 = ((xs[...,2]-px)*(ys[...,0]-py)-(ys[...,2]-py)*(xs[...,0]-px))/area
-                f2 = 1-f0-f1
-                dz = (a*picker.depth[triangle,0]+b*picker.depth[triangle,1]+c*picker.depth[triangle,2])
-                closest = (f0*picker.depth[ids,0]+f1*picker.depth[ids,1]+f2*picker.depth[ids,2])
-                # Correct the sample's plane depth at each actual UV texel.
-                valid_front = (nearest>=0)&(f0>=-1e-6)&(f1>=-1e-6)&(f2>=-1e-6)
-                inside &= ~valid_front | (dz>=closest-1e-6)
-            if stamp is not None:
-                sx = (px-(start[0]-radius))/diameter
-                sy = (py-(start[1]-radius))/diameter
-                inside &= (sx>=0)&(sx<=1)&(sy>=0)&(sy<=1)
-                stamp_x = np.clip(np.rint(sx*(stamp.shape[1]-1)).astype(np.int32),0,stamp.shape[1]-1)
-                stamp_y = np.clip(np.rint(sy*(stamp.shape[0]-1)).astype(np.int32),0,stamp.shape[0]-1)
-                alpha = stamp[stamp_y,stamp_x].astype(np.float32)/255
-            mask = np.where(inside,np.rint(alpha*255),0).astype(np.uint8)
-            image = Image.fromarray(mask)
-            box = image.getbbox()
-            if box:
-                patches.append((image.crop(box),(x0+box[0],tile_top+box[1])))
-    return patches
+    return _masks_batched(picker,candidates,(left,top,right,bottom),start,end,
+                          texture_size,radius,hardness,paint_through,stencil)

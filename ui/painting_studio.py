@@ -17,6 +17,10 @@ from ui.surface_paint import surface_masks
 from core.brushes import stamp_mask
 from core.mesh_regions import MeshRegions
 from core.version import APP_VERSION
+from core.edit_queue import EditQueue
+from ui.paint_updates import PaintUpdates
+from ui.realtime_policy import TextureDamage
+from ui.realtime_viewer import preview_size
 
 from core.paint_studio import find_albedo
 from core.layered_materials import LayeredPaintSession, PRESETS, apply_materials_to_export
@@ -68,15 +72,29 @@ class PaintingStudio(tk.Frame):
         self._picker_state = None
         self._picker = None
         self._preview_job = None
+        self._edit_job = None
+        self._edits = EditQueue()
+        self._persistent_edits = 0
+        self._updates = PaintUpdates(self.session)
+        self._texture_size = self.session.image.size
+        self._display_image = self.session.image.resize(
+            preview_size(self._texture_size,2048),Image.Resampling.BILINEAR).convert('RGB')
+        self._display_selection = None
+        self._display_damage = TextureDamage(self._display_image.size)
+        self._worker_picker = None
+        self._worker_picker_state = None
+        self._stroke_id = 0
         self._make_ui()
         self._render_texture()
         self._schedule_preview()
+        self._queue_edit(lambda:None,materials=True)
         if self.session.restored_layers:
             self.status.set('Camadas da pintura anterior restauradas. A textura MAES é exibida somente após exportar no jogo.')
 
     def destroy(self):
         """Cancel pending renders when a project closes or switches."""
-        for name in ('_refresh_id', '_preview_job'):
+        self._closing_edit=self._edits.close(drain=self._persistent_edits>0)
+        for name in ('_refresh_id', '_preview_job', '_edit_job'):
             job = getattr(self, name, None)
             if job is not None:
                 try:
@@ -92,6 +110,121 @@ class PaintingStudio(tk.Frame):
             window,binding=self._key_binding
             window.unbind('<KeyPress>',binding)
         super().destroy()
+
+    def _queue_edit(self,work,done=None,*,materials=False,layers=False,
+                    key=None,merge=None,payload=None,error_title=None,persist=False):
+        if persist:
+            self._persistent_edits += 1
+        def run():
+            value,error = None,None
+            try:
+                value = work()
+            except Exception as exc:
+                error = exc
+            return value,error,self._updates.prepare(materials=materials)
+        def complete(result,error):
+            if persist:
+                self._persistent_edits -= 1
+            if error is None:
+                value,error,update = result
+                self._publish_edit(update)
+                if layers:
+                    self._update_layers()
+            if error is not None:
+                self.status.set(str(error))
+                if error_title:
+                    messagebox.showerror(error_title,str(error),parent=self)
+            elif done:
+                done(value)
+        self._edits.submit(run,complete,key=key,merge=merge,payload=payload)
+        if self._edit_job is None and self._edits.busy:
+            self._edit_job = self.after(8,self._poll_edits)
+
+    def _poll_edits(self):
+        self._edit_job = None
+        self._edits.poll()
+        if self._edits.busy:
+            self._edit_job = self.after(8,self._poll_edits)
+
+    def _publish_edit(self,update):
+        if update.full is not None:
+            self._display_image = update.full
+            self._display_damage.mark()
+        for box,patch in update.patches:
+            self._display_image.paste(patch,box)
+            self._display_damage.mark(box)
+        self._display_selection = update.selection
+        if update.material_changed:
+            self.viewer.set_materials(update.materials)
+        self._request_refresh()
+        self._schedule_preview()
+
+    def _camera_snapshot(self):
+        viewer = self.viewer
+        options = dict(yaw=viewer.yaw,pitch=viewer.pitch,zoom=viewer.zoom,
+            canvas_width=viewer.winfo_width(),canvas_height=viewer.winfo_height(),
+            pan_x=viewer.pan_x,pan_y=viewer.pan_y,show_reference=viewer.compare_reference,
+            preview_limit=viewer.projection_limit)
+        return viewer._mesh,options,(id(viewer._mesh),*options.values())
+
+    def _worker_projection(self,camera):
+        model,options,key = camera
+        if model is None:
+            return None
+        if self._worker_picker_state != key:
+            self._worker_picker = ProjectedUVPicker(model,**options)
+            self._worker_picker_state = key
+        return self._worker_picker
+
+    def _paint_options(self):
+        return (self.color.get(),self.size.get(),self.opacity.get()/100,
+                self.hardness.get()/100,self.paint_through.get())
+
+    @staticmethod
+    def _extend_path(path,points):
+        """Coalesce straight queued motion while retaining every change of direction."""
+        for point in points:
+            if path and point == path[-1]:
+                continue
+            if len(path)>1:
+                a,b = path[-2:]
+                dx,dy = point[0]-a[0],point[1]-a[1]
+                length = math.hypot(dx,dy)
+                between = (b[0]-a[0])*dx+(b[1]-a[1])*dy
+                if (length and 0<=between<=length*length
+                        and abs(dx*(b[1]-a[1])-dy*(b[0]-a[0]))/length<.25):
+                    path[-1] = point
+                    continue
+            path.append(point)
+
+    def _worker_surface(self,camera,path,options,erase=False,stencil=None):
+        picker = self._worker_projection(camera)
+        if picker is None:
+            return
+        color,size,opacity,hardness,through = options
+        patches = []
+        pairs = list(zip(path,path[1:])) or [(path[0],path[0])]
+        for start,end in pairs:
+            distance = math.hypot(end[0]-start[0],end[1]-start[1])
+            segments = max(1,math.ceil(distance/150))
+            for index in range(segments):
+                a = tuple(start[k]+(end[k]-start[k])*index/segments for k in (0,1))
+                b = tuple(start[k]+(end[k]-start[k])*(index+1)/segments for k in (0,1))
+                patches.extend(surface_masks(picker,a,b,self._texture_size,
+                    diameter=size*(2 if stencil is not None else 1),hardness=hardness,
+                    paint_through=through,stencil=stencil))
+        self.session.apply_surface_masks(patches,color,opacity,erase)
+
+    def _worker_region(self,hit,model,mode,angle,tolerance):
+        if mode == 'Cor similar':
+            self.session.select_region(*hit.pixel(*self._texture_size),tolerance)
+            return 'Região conectada selecionada para pintura e materiais.'
+        if self._regions is None or self._region_mesh is not model:
+            self._regions = MeshRegions(model)
+            self._region_mesh = model
+        faces = self._regions.region(hit.triangle,angle)
+        self.session.selection = self._regions.mask(faces,self._texture_size)
+        return f'Região geométrica: {len(faces)} faces. Ajuste o ângulo na aba Pintar.'
 
     @staticmethod
     def _label(parent, text, color=TEXT, size=10, bold=False, **kw):
@@ -530,46 +663,26 @@ class PaintingStudio(tk.Frame):
         self.layer_opacity.set(layer.opacity)
 
     def _layer_select(self,_event):
-        if not self.layer_list.curselection():
-            return
-        self.session.set_active(int(self.layer_list.curselection()[0]))
-        layer=self.session.layers[self.session.active_layer]
-        self.layer_visible.set(layer.visible)
-        self.layer_opacity.set(layer.opacity)
+        if self.layer_list.curselection():
+            index=int(self.layer_list.curselection()[0])
+            self._queue_edit(lambda:self.session.set_active(index),layers=True)
 
     def _layer_add(self):
-        try:
-            self.session.add_layer(f'Camada {len(self.session.layers)+1}')
-            self._update_layers()
-        except ValueError as exc:
-            messagebox.showwarning('Camadas',str(exc),parent=self)
+        self._queue_edit(lambda:self.session.add_layer(f'Camada {len(self.session.layers)+1}'),layers=True)
 
     def _layer_remove(self):
-        try:
-            self.session.remove_layer()
-            self._update_layers()
-            self._request_refresh()
-            self._schedule_preview()
-        except ValueError as exc:
-            messagebox.showwarning('Camadas',str(exc),parent=self)
+        self._queue_edit(self.session.remove_layer,layers=True)
 
     def _layer_move(self,step):
-        self.session.move_layer(step)
-        self._update_layers()
-        self._request_refresh()
-        self._schedule_preview()
+        self._queue_edit(lambda:self.session.move_layer(step),layers=True)
 
     def _layer_visibility(self):
-        self.session.set_visible(self.layer_visible.get())
-        self._update_layers()
-        self._request_refresh()
-        self._schedule_preview()
+        value=self.layer_visible.get()
+        self._queue_edit(lambda:self.session.set_visible(value),layers=True)
 
     def _layer_opacity_change(self,_event):
-        self.session.set_opacity(int(self.layer_opacity.get()))
-        self._update_layers()
-        self._request_refresh()
-        self._schedule_preview()
+        value=int(self.layer_opacity.get())
+        self._queue_edit(lambda:self.session.set_opacity(value),layers=True)
 
     def _tool_tab(self,tabs,title):
         """Keep every tool reachable on smaller Windows displays."""
@@ -647,39 +760,26 @@ class PaintingStudio(tk.Frame):
             variable.set(value)
 
     def _apply_material(self):
-        try:
-            self.session.apply_material_values(tuple(int(v.get()) for v in self._material_channels))
-            self.viewer.set_materials(self.session.maes_image)
-            self.status.set('Material '+self.material_name.get()+
-                ' aplicado à região. Salve e reexporte para conferir no TaleSpire.')
-        except (OSError,ValueError) as exc:
-            messagebox.showwarning('Material',str(exc),parent=self)
+        values=tuple(int(v.get()) for v in self._material_channels)
+        name=self.material_name.get()
+        self._queue_edit(lambda:self.session.apply_material_values(values),
+            lambda _:self.status.set('Material '+name+' aplicado à região. Salve e reexporte para conferir no TaleSpire.'),
+            materials=True)
 
     def _clear_region(self):
-        self.session.clear_region()
-        self._request_refresh()
-        self._schedule_preview()
-        self.status.set('Seleção de região removida.')
+        self._queue_edit(self.session.clear_region,
+                         lambda _:self.status.set('Seleção de região removida.'))
 
     def _pick_region(self,point):
-        active=self.session.select_region(*point,self.tolerance.get())
-        self.status.set('Região conectada selecionada para pintura e materiais.'
-                        if active else 'Nenhuma região selecionada.')
-        self._request_refresh()
-        self._schedule_preview()
+        tolerance=self.tolerance.get()
+        self._queue_edit(lambda:self.session.select_region(*point,tolerance),
+            lambda active:self.status.set('Região conectada selecionada para pintura e materiais.'
+                                          if active else 'Nenhuma região selecionada.'))
 
     def _pick_surface_region(self,hit):
-        if self.region_mode.get()=='Cor similar':
-            self._pick_region(hit.pixel(*self.session.image.size))
-            return
-        if self._regions is None or self._region_mesh is not self.viewer._mesh:
-            self._regions=MeshRegions(self.viewer._mesh)
-            self._region_mesh=self.viewer._mesh
-        faces=self._regions.region(hit.triangle,self.region_angle.get())
-        self.session.selection=self._regions.mask(faces,self.session.image.size)
-        self.status.set(f'Região geométrica: {len(faces)} faces. Ajuste o ângulo na aba Pintar.')
-        self._request_refresh()
-        self._schedule_preview()
+        model=self.viewer._mesh
+        mode,angle,tolerance=self.region_mode.get(),self.region_angle.get(),self.tolerance.get()
+        self._queue_edit(lambda:self._worker_region(hit,model,mode,angle,tolerance),self.status.set)
 
     def _set_color(self,value):
         self.color.set(value)
@@ -714,59 +814,66 @@ class PaintingStudio(tk.Frame):
         except (OSError,ValueError) as error:
             messagebox.showerror('Carimbo inválido',str(error),parent=self)
 
-    def _stamp_at(self,point):
+    def _stamp_settings(self):
         shape=self.stamp_name.get()
-        use_custom=(shape=='PNG personalizado')
-        if use_custom and self.stamp_image is None:
+        custom=self.stamp_image if shape=='PNG personalizado' else None
+        if shape=='PNG personalizado' and custom is None:
             self.status.set('Carregue um PNG antes de usar o carimbo personalizado.')
-            return False
-        self.session.stamp(*point,self.color.get(),
-                           diameter=max(4,self.size.get()*2),
-                           opacity=self.opacity.get()/100,
-                           shape=shape,custom=self.stamp_image if use_custom else None)
-        return True
+            return None
+        return shape,custom
 
     def _coords(self,event):
         x0,y0,scale=self._view
-        x=int((event.x-x0)/scale)
-        y=int((event.y-y0)/scale)
-        if 0<=x<self.session.image.width and 0<=y<self.session.image.height:
-            return (x,y)
+        x,y=int((event.x-x0)/scale),int((event.y-y0)/scale)
+        if 0<=x<self._texture_size[0] and 0<=y<self._texture_size[1]:
+            return x,y
         return None
 
     def _mouse_down(self,event):
-        p=self._coords(event)
-        if p is None: return
+        point=self._coords(event)
+        self._last=None
+        if point is None:
+            return
         mode=self.mode.get()
         if mode=='conta-gotas':
-            self._set_color(self.session.pick(*p))
+            self._queue_edit(lambda:self.session.pick(*point),self._set_color)
             return
         if mode=='regiao':
-            self._pick_region(p)
+            self._pick_region(point)
             return
-        self.session.checkpoint()
-        if mode=='balde':
-            self.session.bucket(*p,self.color.get(),self.tolerance.get())
-        elif mode=='carimbo':
-            if not self._stamp_at(p):
-                return
-        else:
-            self.session.stroke(p,p,self.color.get(),self.size.get(),
-                                self.opacity.get()/100,erase=(mode=='borracha'),
-                                hardness=self.hardness.get()/100)
-        self._last=p if mode in ('pincel','borracha') else None
-        self._request_refresh()
-        self._schedule_preview()
+        options=self._paint_options()
+        tolerance=self.tolerance.get()
+        stamp=self._stamp_settings() if mode=='carimbo' else None
+        if mode=='carimbo' and stamp is None:
+            return
+        self._stroke_id+=1
+        def work():
+            color,size,opacity,hardness,_=options
+            self.session.checkpoint()
+            if mode=='balde':
+                self.session.bucket(*point,color,tolerance)
+            elif mode=='carimbo':
+                self.session.stamp(*point,color,diameter=max(4,size*2),opacity=opacity,
+                                   shape=stamp[0],custom=stamp[1])
+            else:
+                self.session.stroke(point,point,color,size,opacity,erase=mode=='borracha',hardness=hardness)
+        self._queue_edit(work)
+        self._last=point if mode in ('pincel','borracha') else None
 
     def _mouse_drag(self,event):
         point=self._coords(event)
-        if point is None or self._last is None: return
-        self.session.stroke(self._last,point,self.color.get(),self.size.get(),
-                            self.opacity.get()/100,erase=self.mode.get()=='borracha',
-                            hardness=self.hardness.get()/100)
+        if point is None or self._last is None:
+            return
+        path=[self._last,point]
+        options=self._paint_options()
+        erase=self.mode.get()=='borracha'
         self._last=point
-        self._request_refresh()
-        self._schedule_preview()
+        def work():
+            color,size,opacity,hardness,_=options
+            for start,end in zip(path,path[1:]):
+                self.session.stroke(start,end,color,size,opacity,erase=erase,hardness=hardness)
+        self._queue_edit(work,key=('uv',self._stroke_id,options,erase),
+                         merge=lambda points:self._extend_path(path,points),payload=path)
 
     def _request_refresh(self):
         if self._refresh_id is None:
@@ -779,16 +886,17 @@ class PaintingStudio(tk.Frame):
             return
         cw=max(self.canvas.winfo_width(),200)
         ch=max(self.canvas.winfo_height(),200)
-        src=self.session.image
-        scale=min((cw-20)/src.width,(ch-20)/src.height)
-        width=max(1,round(src.width*scale))
-        height=max(1,round(src.height*scale))
+        src=self._display_image
+        tw,th=self._texture_size
+        scale=min((cw-20)/tw,(ch-20)/th)
+        width=max(1,round(tw*scale))
+        height=max(1,round(th*scale))
         x0=(cw-width)//2
         y0=(ch-height)//2
         self._view=(x0,y0,scale)
         image=src.resize((width,height),Image.Resampling.BILINEAR).convert('RGB')
-        if self.session.selection is not None:
-            mask=self.session.selection.resize((width,height),Image.Resampling.NEAREST)
+        if self._display_selection is not None:
+            mask=self._display_selection.resize((width,height),Image.Resampling.NEAREST)
             tint=Image.blend(image,Image.new('RGB',image.size,'#AA68EC'),.22)
             image=Image.composite(tint,image,mask)
         if self.show_uv.get():
@@ -834,80 +942,67 @@ class PaintingStudio(tk.Frame):
         if not self.paint3d_enabled.get():
             self.viewer._start_drag(event)
             return
-        try:
-            point=self._surface_pixel(event)
-        except ValueError as exc:
-            self.status.set(str(exc))
-            return
-        if point is None:
-            self.status.set('Clique sobre uma parte visível do personagem.')
-            return
         mode=self.mode.get()
-        if mode=='conta-gotas':
-            self._set_color(self.session.pick(*point))
+        camera=self._camera_snapshot()
+        options=self._paint_options()
+        region=(self.region_mode.get(),self.region_angle.get(),self.tolerance.get())
+        stamp=self._stamp_settings() if mode=='carimbo' else None
+        if mode=='carimbo' and stamp is None:
             return
-        if mode=='regiao':
-            try:
-                self._pick_surface_region(self._current_hit)
-            except ValueError as exc:
-                self.status.set(str(exc))
-            return
-        self.session.checkpoint()
         screen=(event.x,event.y)
-        try:
+        self._stroke_id+=1
+        stroke_id=self._stroke_id
+        self._last_3d=screen if mode in ('pincel','borracha') else None
+        def work():
+            picker=self._worker_projection(camera)
+            hit=picker.hit(*screen) if picker is not None else None
+            if hit is None:
+                return ('status','Clique sobre uma parte visível do personagem.')
+            point=hit.pixel(*self._texture_size)
+            if mode=='conta-gotas':
+                return ('color',self.session.pick(*point))
+            if mode=='regiao':
+                return ('status',self._worker_region(hit,camera[0],*region))
+            self.session.checkpoint()
+            self._worker_stroke_id=stroke_id
             if mode=='balde':
-                if self.region_mode.get()=='Geometria' and self.session.selection is None:
-                    self._pick_surface_region(self._current_hit)
-                self.session.bucket(*point,self.color.get(),self.tolerance.get())
-            elif mode=='carimbo':
-                custom=self.stamp_name.get()=='PNG personalizado'
-                if custom and self.stamp_image is None:
-                    self.status.set('Carregue um PNG na aba Pintar antes de carimbar.')
-                    return
-                stencil=stamp_mask(128,self.stamp_name.get(),self.stamp_image if custom else None)
-                self._paint_surface(screen,screen,stencil=stencil)
+                if region[0]=='Geometria' and self.session.selection is None:
+                    self._worker_region(hit,camera[0],*region)
+                self.session.bucket(*point,options[0],region[2])
             else:
-                self._paint_surface(screen,screen,erase=(mode=='borracha'))
-                self._last_3d=screen
-        except ValueError as exc:
-            self.status.set(str(exc))
-            return
-        self._request_refresh()
-        self._schedule_preview()
+                stencil=None if stamp is None else stamp_mask(128,stamp[0],stamp[1])
+                self._worker_surface(camera,[screen],options,mode=='borracha',stencil)
+            return None
+        def done(result):
+            if result:
+                kind,value=result
+                self._set_color(value) if kind=='color' else self.status.set(value)
+        self._queue_edit(work,done)
 
     def _paint_surface(self,start,end,erase=False,stencil=None):
-        picker=self._picker_for_camera()
-        if picker is None:
-            return
-        distance=math.hypot(end[0]-start[0],end[1]-start[1])
-        segments=max(1,math.ceil(distance/150))
-        patches=[]
-        for i in range(segments):
-            a=tuple(start[j]+(end[j]-start[j])*i/segments for j in (0,1))
-            b=tuple(start[j]+(end[j]-start[j])*(i+1)/segments for j in (0,1))
-            patches.extend(surface_masks(picker,a,b,self.session.image.size,
-                diameter=max(4,self.size.get()*2) if stencil is not None else self.size.get(),
-                hardness=self.hardness.get()/100,
-                paint_through=self.paint_through.get(),stencil=stencil))
-        self.session.apply_surface_masks(patches,self.color.get(),self.opacity.get()/100,erase)
+        camera,options=self._camera_snapshot(),self._paint_options()
+        self._queue_edit(lambda:self._worker_surface(camera,[start,end],options,erase,stencil))
 
     def _paint3d_drag(self,event):
         self._brush_motion(event)
         if not self.paint3d_enabled.get():
             self.viewer._drag(event)
             return
-        if self.mode.get() not in ('pincel','borracha') or self._last_3d is None:
+        if self._last_3d is None or self.mode.get() not in ('pincel','borracha'):
             return
         screen=(event.x,event.y)
-        try:
-            self._paint_surface(self._last_3d,screen,erase=self.mode.get()=='borracha')
-            self._last_3d=screen
-        except ValueError as exc:
-            self.status.set(str(exc))
-            self._last_3d=None
-            return
-        self._request_refresh()
-        self._schedule_preview()
+        path=[self._last_3d,screen]
+        self._last_3d=screen
+        camera,options=self._camera_snapshot(),self._paint_options()
+        erase=self.mode.get()=='borracha'
+        stroke_id=self._stroke_id
+        def work():
+            if getattr(self,'_worker_stroke_id',None)!=stroke_id:
+                self.session.checkpoint()
+                self._worker_stroke_id=stroke_id
+            self._worker_surface(camera,path,options,erase)
+        self._queue_edit(work,key=('surface',stroke_id,camera[2],options,erase),
+                         merge=lambda points:self._extend_path(path,points),payload=path)
 
     def _paint3d_end(self,_event):
         self._last_3d=None
@@ -922,30 +1017,24 @@ class PaintingStudio(tk.Frame):
         self._preview_job=None
         if not self.winfo_exists() or self.viewer._mesh is None:
             return
-        self.viewer.update_paint(self.session.image,
-            self.session.preview_damage.consume(),self.session.selection)
+        self.viewer.update_paint(self._display_image,
+            self._display_damage.consume(),self._display_selection)
 
     def _undo(self):
-        if self.session.undo():
-            self._update_layers()
-            self._request_refresh()
-            self._schedule_preview()
-            self.viewer.set_materials(self.session.maes_image)
+        self._last=self._last_3d=None
+        self._queue_edit(self.session.undo,materials=True,layers=True)
 
     def _redo(self):
-        if self.session.redo():
-            self._update_layers()
-            self._request_refresh()
-            self._schedule_preview()
-            self.viewer.set_materials(self.session.maes_image)
+        self._last=self._last_3d=None
+        self._queue_edit(self.session.redo,materials=True,layers=True)
 
     def _save(self):
-        try:
-            self.saved=None
-            self.saved=self.session.save_draft(self.project)
-            self.status.set('Rascunho e camadas salvos: '+str(self.saved))
-        except (OSError,ValueError) as exc:
-            messagebox.showerror('Falha ao salvar',str(exc),parent=self)
+        self.status.set('Salvando projeto…')
+        def done(path):
+            self.saved=path
+            self.status.set('Rascunho e camadas salvos: '+str(path))
+        self._queue_edit(lambda:self.session.save_draft(self.project),done,
+                         error_title='Falha ao salvar',persist=True)
 
     def _apply(self):
         if not messagebox.askyesno('Aplicar pintura',
@@ -953,19 +1042,16 @@ class PaintingStudio(tk.Frame):
             'O arquivo .tsMod existente NÃO será modificado; depois gere novamente o .tsMod. Continuar?',
             parent=self):
             return
-        try:
-            self._save()
-            if not getattr(self,'saved',None): return
-            changed=apply_materials_to_export(
-                self.project,self.saved,self.session.material_draft if self.session.maes_dirty else None)
+        self.status.set('Exportando texturas…')
+        def work():
+            draft=self.session.save_draft(self.project)
+            return apply_materials_to_export(self.project,draft,
+                self.session.material_draft if self.session.maes_dirty else None)
+        def done(changed):
             self.status.set('Pintura aplicada em '+str(len(changed))+' textura(s). Reexporte o .tsMod.')
-            try:
-                self.viewer.open(find_project_obj(self.project))
-            except (OSError,ValueError):
-                pass
-            if self.on_apply: self.on_apply()
-        except (OSError,ValueError) as exc:
-            messagebox.showerror('Não foi possível aplicar',str(exc),parent=self)
+            if self.on_apply:
+                self.on_apply()
+        self._queue_edit(work,done,error_title='Não foi possível aplicar',persist=True)
 
 
 def _uv_edges(project: Path, max_lines: int = 3500):
