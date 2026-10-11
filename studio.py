@@ -603,7 +603,7 @@ def run_packaged_selftest(report_file: str) -> int:
     import json
     import sys
     result = {
-        'version': '2.2.14',
+        'version': APP_VERSION,
         'frozen': bool(getattr(sys, 'frozen', False)),
         'test': 'resource_and_tcl_smoke',
         'checked': {},
