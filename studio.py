@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V5.2.0.
+"""Astronyx Mini Forge Studio V5.3.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -691,6 +691,7 @@ def run_packaged_selftest(report_file: str) -> int:
         from core.material_palette import MATERIALS
         from ui.material_tiles import material_swatch
         from ui.mesh_normals import corner_normals
+        from core.auto_shading import build_shading_maps, geometry_signature
         result['checked']['material_palette_packaged']=all(
             material_swatch(choice).size==(48,48) for choice in MATERIALS)
         normals=corner_normals(sample.points,sample.triangles,
@@ -706,6 +707,15 @@ def run_packaged_selftest(report_file: str) -> int:
             session.stroke((16,16),(16,16),'#FFC000',material=(230,60,210))
             result['checked']['material_brush_packaged']=(
                 session.maes_image.getpixel((16,16))==(230,127,60,210))
+            obj=project/'TaleWeaverCmd_Source/model.obj'
+            obj.write_text('v -1 -1 0\nv 1 -1 0\nv 0 1 0\n'
+                'vt 0 0\nvt 1 0\nvt .5 1\nf 1/1 2/2 3/3\n')
+            influence=build_shading_maps(sample,session.image.size,maes=session.maes_image)
+            session.configure_shading(maps=influence,signature=geometry_signature(project),enabled=True)
+            painted=session.image.tobytes();session.save_draft(project)
+            restored=LayeredPaintSession(folder/'Albedo.png',project)
+            result['checked']['automatic_shading_packaged']=(
+                restored.automatic_shading.enabled and restored.image.tobytes()==painted)
     except Exception as exc:
         result['checked']['material_brush_packaged']=False
         result['material_error']=str(exc)
@@ -739,7 +749,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 5.2.0')
+            print('Astronyx Mini Forge Studio 5.3.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''

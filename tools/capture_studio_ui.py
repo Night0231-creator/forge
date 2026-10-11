@@ -72,7 +72,7 @@ def prepare_example(destination):
     return project
 
 
-def capture(project, output, width=1440, height=880, page='editor', inspector='paint'):
+def capture(project, output, width=1440, height=880, page='editor', inspector='paint', automatic_shading=False):
     project=Path(project).resolve() if project else None
     entry=Miniature(folder=project,name=project.name,tsmod=None,thumbnail=None,
                     obj=find_project_obj(project),updated_at=project.stat().st_mtime) if project else None
@@ -106,14 +106,17 @@ def capture(project, output, width=1440, height=880, page='editor', inspector='p
             if page=='editor' and editor is None:
                 raise RuntimeError('Painting editor did not open.')
             if editor and page=='editor':
-                editor.tool_tabs.select(('paint','material','layers','view').index(inspector))
-            deadline=time.monotonic()+12
+                editor.tool_tabs.select(('paint','material','effects','layers','view').index(inspector))
+                if automatic_shading:
+                    editor._shading_preset((45,35))
+            deadline=time.monotonic()+20
             ready=False
             while time.monotonic()<deadline:
                 window.update()
                 viewer=editor.viewer if editor and page=='editor' else None
                 ready=viewer is None or viewer.frame_count>0 or (
                     viewer._using_fallback and viewer._fallback._texture_image is not None)
+                ready=ready and (editor is None or not editor._edits.busy)
                 if ready:
                     # Allow the final layout and fallback composition to settle.
                     until=time.monotonic()+.25
@@ -150,7 +153,8 @@ if __name__=='__main__':
     parser.add_argument('--project')
     parser.add_argument('--example',action='store_true')
     parser.add_argument('--page',choices=('editor','welcome','import','library'),default='editor')
-    parser.add_argument('--inspector',choices=('paint','material','layers','view'),default='paint')
+    parser.add_argument('--inspector',choices=('paint','material','effects','layers','view'),default='paint')
+    parser.add_argument('--automatic-shading',action='store_true')
     parser.add_argument('--output',required=True)
     parser.add_argument('--width',type=int,default=1440)
     parser.add_argument('--height',type=int,default=880)
@@ -160,6 +164,6 @@ if __name__=='__main__':
         parser.error('An editor capture requires --project or --example.')
     if args.example:
         with tempfile.TemporaryDirectory(prefix='Astronyx-Example-QA-') as tmp:
-            capture(prepare_example(tmp),args.output,args.width,args.height,args.page,args.inspector)
+            capture(prepare_example(tmp),args.output,args.width,args.height,args.page,args.inspector,args.automatic_shading)
     else:
-        capture(args.project,args.output,args.width,args.height,args.page,args.inspector)
+        capture(args.project,args.output,args.width,args.height,args.page,args.inspector,args.automatic_shading)

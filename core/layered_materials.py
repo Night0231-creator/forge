@@ -18,6 +18,8 @@ import numpy as np
 
 from .paint_studio import PaintSession, MAX_PIXELS, _project, _write_png
 from .brushes import coverage, segment_distance, stamp_mask
+from .auto_shading import AutomaticShading, geometry_signature
+from .texture_data import fit_maes
 
 PRESETS = {
     'Aço escovado': (210, 235, 0, 175),
@@ -107,6 +109,7 @@ class LayeredPaintSession(PaintSession):
         self.maes_image = None
         self.maes_dirty = False
         self.material_draft: Path | None = None
+        self.automatic_shading = AutomaticShading()
         if self.material_source is not None:
             with Image.open(self.material_source) as raw:
                 if not 0 < raw.width * raw.height <= MAX_PIXELS:
@@ -120,32 +123,26 @@ class LayeredPaintSession(PaintSession):
         self.restored_layers = self._restore_layers()
         self._compose()
 
-    def _compose(self):
-        result = self.base.copy()
+    def _composite(self, box=None):
+        result = self.base.copy() if box is None else self.base.crop(box)
         for layer in self.layers:
             if not layer.visible or layer.opacity <= 0:
                 continue
-            pixels = layer.pixels
+            pixels = layer.pixels if box is None else layer.pixels.crop(box)
             if layer.opacity < 100:
                 pixels = pixels.copy()
                 alpha = pixels.getchannel('A').point(lambda x: round(x*layer.opacity/100))
                 pixels.putalpha(alpha)
             result = Image.alpha_composite(result, pixels)
-        self.image = result
+        return result
+
+    def _compose(self):
+        self.image = self.automatic_shading.apply(self._composite(),self.base.size)
         self.preview_damage.mark()
 
     def _compose_region(self, box):
         """Recompose only dirty rectangle while brushing; no 4K full repaint per move."""
-        result=self.base.crop(box)
-        for layer in self.layers:
-            if not layer.visible or layer.opacity <= 0:
-                continue
-            pixels=layer.pixels.crop(box)
-            if layer.opacity < 100:
-                alpha=pixels.getchannel('A').point(
-                    lambda value: round(value*layer.opacity/100))
-                pixels.putalpha(alpha)
-            result=Image.alpha_composite(result,pixels)
+        result=self.automatic_shading.apply(self._composite(box),self.base.size,box)
         self.image.paste(result,box)
         self.preview_damage.mark(box)
 
@@ -155,10 +152,11 @@ class LayeredPaintSession(PaintSession):
                 self.active_layer,
                 self.selection.copy() if self.selection is not None else None,
                 self.maes_image.copy() if self.maes_image is not None else None,
-                self.maes_dirty)
+                self.maes_dirty, self.automatic_shading)
 
     def _restore(self, snapshot):
-        self.layers, self.active_layer, self.selection, self.maes_image, self.maes_dirty = snapshot
+        (self.layers, self.active_layer, self.selection, self.maes_image,
+         self.maes_dirty, self.automatic_shading) = snapshot
         if self.material_damage is not None:
             self.material_damage.mark()
         self._compose()
@@ -230,8 +228,25 @@ class LayeredPaintSession(PaintSession):
         self._compose()
 
     def select_region(self, x: int, y: int, tolerance: int = 12) -> int:
-        self.selection = _flood_mask(self.image, (x,y), tolerance)
+        source = self._composite() if self.automatic_shading.enabled else self.image
+        self.selection = _flood_mask(source, (x,y), tolerance)
         return self.selection.getbbox() is not None
+
+    def pick(self, x: int, y: int) -> str:
+        if not (0 <= x < self.image.width and 0 <= y < self.image.height):
+            raise ValueError('Clique dentro da textura.')
+        # Sample the underlying paint, so the effect is not applied twice
+        # when that color is reused. No full-atlas copy for the eyedropper.
+        pixel = self._composite((x,y,x+1,y+1)).getpixel((0,0))
+        return '#'+''.join(f'{c:02X}' for c in pixel[:3])
+
+    def configure_shading(self, **changes):
+        result = self.automatic_shading.configure(**changes)
+        if result == self.automatic_shading:
+            return
+        self.checkpoint()
+        self.automatic_shading = result
+        self._compose()
 
     def clear_region(self):
         self.selection = None
@@ -344,8 +359,9 @@ class LayeredPaintSession(PaintSession):
         self._apply_mask(tile,(clipped[0],clipped[1]),color,opacity,material=material)
 
     def bucket(self, x: int, y: int, color: str, tolerance: int = 12, material=None):
+        source = self._composite() if self.automatic_shading.enabled else self.image
         mask = self.selection if self.selection is not None else _flood_mask(
-            self.image,(x,y),tolerance)
+            source,(x,y),tolerance)
         self._apply_mask(mask,(0,0),color,1.0,material=material)
 
     def _validate_finish(self, values):
@@ -436,6 +452,14 @@ class LayeredPaintSession(PaintSession):
             'layers':descriptions,
             'maes_dirty':bool(self.maes_dirty),
         }
+        shade = self.automatic_shading
+        if shade.maps is not None:
+            target = paint_dir/'sombreamento.png'
+            if target.is_symlink():
+                raise ValueError('Mapa de sombreamento inseguro.')
+            _write_png(shade.maps,target)
+            record['automatic_shading'] = dict(file=target.name, signature=shade.signature,
+                enabled=shade.enabled,shadows=shade.shadows,highlights=shade.highlights)
         (paint_dir/'camadas.json').write_text(
             json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
         if self.maes_dirty and self.maes_image is not None:
@@ -478,6 +502,7 @@ class LayeredPaintSession(PaintSession):
                 return False
             self.layers=restored
             self.active_layer=active
+            self._restore_shading(folder,data.get('automatic_shading'))
             # Restore MAES only when the matching draft belongs to this project.
             p=folder/'MAES_editado.png'
             if (self.maes_image is not None and data.get('maes_dirty')
@@ -489,6 +514,25 @@ class LayeredPaintSession(PaintSession):
             return True
         except (OSError,KeyError,ValueError,TypeError):
             return False
+
+    def _restore_shading(self, folder, record):
+        if not isinstance(record,dict) or record.get('file')!='sombreamento.png':
+            return
+        path = folder/'sombreamento.png'
+        try:
+            if (folder.is_symlink() or path.is_symlink() or not path.is_file()
+                    or record.get('signature')!=geometry_signature(self.project)):
+                return
+            with Image.open(path) as raw:
+                if raw.mode!='RGB' or min(raw.size)<2 or max(raw.size)>1024:
+                    return
+                maps = raw.copy()
+            self.automatic_shading = AutomaticShading().configure(maps=maps,
+                signature=record['signature'],enabled=record['enabled'],
+                shadows=record['shadows'],highlights=record['highlights'])
+        except (OSError,KeyError,ValueError,TypeError):
+            # Invalid/old effects do not discard otherwise valid paint layers.
+            return
 
 
 def apply_materials_to_export(project: str | Path, albedo_draft: str | Path,
@@ -521,8 +565,11 @@ def apply_materials_to_export(project: str | Path, albedo_draft: str | Path,
                 raise ValueError('Destino de pintura inseguro.')
             adjusted=paint
             if target.parent.name=='Entrada_TaleWeaverCmd' and max(paint.size)>2048:
-                adjusted=paint.copy()
-                adjusted.thumbnail((2048,2048),Image.Resampling.LANCZOS)
+                if name=='MAES_editado.png':
+                    adjusted=fit_maes(paint)
+                else:
+                    adjusted=paint.copy()
+                    adjusted.thumbnail((2048,2048),Image.Resampling.LANCZOS)
             jobs.append((target,adjusted))
     stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     backups=[]

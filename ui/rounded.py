@@ -36,8 +36,9 @@ class RoundedButton(tk.Canvas):
     def __init__(self, parent, text, command, *, bg=RAISED,
                  hover=BORDER, fg=TEXT, parent_bg=None,
                  padx=15, pady=9, font=('Segoe UI', 10, 'bold'),
-                 radius=10, width=None, height=None, **kwargs):
+                 radius=10, width=None, height=None, text_inset=14, **kwargs):
         self._font = font
+        self._text_inset = text_inset
         self._fill = bg
         self._hover_color = hover
         self._text_color = fg
@@ -90,7 +91,7 @@ class RoundedButton(tk.Canvas):
                        ACCENT if self.focus_get() == self else bg)
         self.create_text(w/2, h/2, text=self._label, fill=fg,
                          font=self._font, anchor='center', justify='center',
-                         width=max(10, w-14),tags='label')
+                         width=max(10, w-self._text_inset),tags='label')
 
     def configure(self, cnf=None, **kwargs):
         if isinstance(cnf, dict):
@@ -108,6 +109,8 @@ class RoundedButton(tk.Canvas):
             self._text_color = kwargs.pop('fg')
         if 'font' in kwargs:
             self._font = kwargs.pop('font')
+        if 'text_inset' in kwargs:
+            self._text_inset = kwargs.pop('text_inset')
         if 'text' in kwargs:
             self._label = kwargs.pop('text')
         if kwargs:

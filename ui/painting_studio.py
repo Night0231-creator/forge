@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import tkinter as tk
+import tkinter.font as tkfont
 from pathlib import Path
 from tkinter import colorchooser, filedialog, messagebox, ttk
 from PIL import Image, ImageColor, ImageDraw, ImageTk
@@ -25,6 +26,7 @@ from ui.realtime_viewer import preview_size
 from core.paint_studio import find_albedo
 from core.layered_materials import LayeredPaintSession, PRESETS, apply_materials_to_export
 from core.material_palette import MATERIALS
+from core.auto_shading import build_shading_maps, geometry_signature
 from core.footprint_calibrator import find_project_obj
 from ui.texture_viewer import TexturedObjViewer
 from ui.realtime_viewer import RealtimeObjViewer
@@ -93,7 +95,7 @@ class PaintingStudio(tk.Frame):
         self._schedule_preview()
         self._queue_edit(lambda:None,materials=True)
         if self.session.restored_layers:
-            self.status.set('Camadas da pintura anterior restauradas. A textura MAES é exibida somente após exportar no jogo.')
+            self.status.set('Pintura e materiais restaurados. Continue editando a miniatura.')
 
     def destroy(self):
         """Cancel pending renders when a project closes or switches."""
@@ -118,7 +120,7 @@ class PaintingStudio(tk.Frame):
         super().destroy()
 
     def _queue_edit(self,work,done=None,*,materials=False,layers=False,
-                    key=None,merge=None,payload=None,error_title=None,persist=False):
+                    key=None,merge=None,payload=None,error_title=None,persist=False,failed=None):
         if persist:
             self._persistent_edits += 1
         def run():
@@ -138,6 +140,8 @@ class PaintingStudio(tk.Frame):
                     self._update_layers()
             if error is not None:
                 self.status.set(str(error))
+                if failed:
+                    failed(error)
                 if error_title:
                     messagebox.showerror(error_title,str(error),parent=self)
             elif done:
@@ -366,13 +370,16 @@ class PaintingStudio(tk.Frame):
         self._tool_scroll_pages=[]
         paint=self._tool_tab(self.tool_tabs,'Pintar')
         materials=self._tool_tab(self.tool_tabs,'Material')
+        effects=self._tool_tab(self.tool_tabs,'Efeitos')
         layers=self._tool_tab(self.tool_tabs,'Camadas')
         scene=self._tool_tab(self.tool_tabs,'Exibir')
         self.inspector_buttons=[]
-        for index,title in enumerate(('Pintar','Material','Camadas','Exibir')):
-            tab_bar.grid_columnconfigure(index,weight=1,uniform='inspector')
+        inspector_font=tkfont.Font(font=('Segoe UI',8))
+        for index,title in enumerate(('Pintar','Material','Efeitos','Camadas','Exibir')):
+            tab_bar.grid_columnconfigure(index,weight=1)
             button=self._button(tab_bar,title,lambda i=index:self.tool_tabs.select(i))
-            button.configure(width=64,height=32,font=('Segoe UI',8))
+            button.configure(width=inspector_font.measure(title)+8,height=32,
+                             font=('Segoe UI',8),text_inset=4)
             button.grid(row=0,column=index,sticky='ew',padx=1,pady=2)
             self.inspector_buttons.append(button)
         self.tool_tabs.bind('<<NotebookTabChanged>>',self._inspector_changed)
@@ -389,6 +396,7 @@ class PaintingStudio(tk.Frame):
         self._build_surface_options(paint)
         self._build_layers_tab(layers)
         self._build_materials_tab(materials)
+        self._build_effects_tab(effects)
 
         self.viewport_panel=tk.Frame(body,bg=SIDEBAR,highlightbackground=BORDER,highlightthickness=1)
         self.viewport_panel.grid(row=0,column=2,sticky='nsew')
@@ -820,6 +828,87 @@ class PaintingStudio(tk.Frame):
         for tile in self.material_tiles:
             tile.set_selected(False)
 
+    def _build_effects_tab(self,tab):
+        shade=self.session.automatic_shading
+        self.auto_shading=tk.BooleanVar(value=shade.enabled)
+        self.shadow_amount=tk.IntVar(value=shade.shadows)
+        self.highlight_amount=tk.IntVar(value=shade.highlights)
+        self.shading_status=tk.StringVar()
+        self._section(tab,'Pintura automática')
+        self._label(tab,'Dê volume à cor e realce as bordas da miniatura.',
+            color=MUTED,wraplength=245,size=9).pack(anchor='w',padx=12,pady=(2,10))
+        self._check(tab,'Sombras e destaques',self.auto_shading,
+                    self._configure_shading).pack(anchor='w',padx=10,pady=5)
+        settings=tk.Frame(tab,bg=PANEL)
+        settings.pack(fill='x',padx=12,pady=8)
+        for title,variable in (('Sombras',self.shadow_amount),('Destaques',self.highlight_amount)):
+            track=slider(settings,title,variable,percent=True)
+            track.bind('<ButtonRelease-1>',self._configure_shading)
+            track.bind('<KeyRelease-Left>',self._configure_shading)
+            track.bind('<KeyRelease-Right>',self._configure_shading)
+        presets=tk.Frame(tab,bg=PANEL)
+        presets.pack(fill='x',padx=10,pady=(2,12))
+        for title,values in (('Suave',(30,20)),('Miniatura',(45,35)),('Contraste',(70,55))):
+            self._button(presets,title,lambda v=values:self._shading_preset(v)).pack(
+                side='left',expand=True,fill='x',padx=2)
+        self._button(tab,'Gerar / atualizar mapas',lambda:self._configure_shading(rebuild=True)).pack(
+            fill='x',padx=12,pady=4)
+        self._label(tab,'',textvariable=self.shading_status,color=GREEN,
+            wraplength=245,size=9).pack(anchor='w',padx=12,pady=(10,16))
+        self._label(tab,'O efeito acompanha novas cores, pode ser desfeito e entra na '
+            'textura exportada. Desligue para comparar com a pintura original.',
+            color=MUTED,wraplength=245,size=9).pack(anchor='w',padx=12,pady=6)
+        self._label(tab,'Use modelos com UVs separados para preservar os detalhes. '
+            'Os mapas aproveitam a geometria, as normais e a oclusão disponíveis.',
+            color=MUTED,wraplength=245,size=9).pack(anchor='w',padx=12,pady=6)
+        self._sync_shading_controls()
+
+    def _sync_shading_controls(self):
+        shade=self.session.automatic_shading
+        self.auto_shading.set(shade.enabled)
+        self.shadow_amount.set(shade.shadows)
+        self.highlight_amount.set(shade.highlights)
+        if shade.maps is None:
+            text='Ative o efeito para preparar os mapas em segundo plano.'
+        else:
+            text=('Efeito ativo' if shade.enabled else 'Efeito desligado')
+            text+=f' · mapa {shade.maps.width} × {shade.maps.height}'
+        self.shading_status.set(text)
+
+    def _shading_preset(self,values):
+        self.shadow_amount.set(values[0]);self.highlight_amount.set(values[1])
+        self.auto_shading.set(True)
+        self._configure_shading()
+
+    def _configure_shading(self,_event=None,*,rebuild=False):
+        # Capture all Tk values and geometry before dispatch; the worker never
+        # reads a variable or opens a GPU context on the UI's thread.
+        enabled=self.auto_shading.get() or rebuild
+        shadows=self.shadow_amount.get();highlights=self.highlight_amount.get()
+        mesh=self.viewer._mesh
+        normal=self.viewer._normal_map
+        if mesh is None and enabled:
+            self.auto_shading.set(False)
+            self.shading_status.set('Abra uma miniatura preparada antes de ativar o efeito.')
+            return
+        self.shading_status.set('Preparando efeito… Você pode continuar girando a miniatura.')
+        self.status.set('Atualizando sombras e destaques…')
+        def work():
+            changes=dict(enabled=enabled,shadows=shadows,highlights=highlights)
+            shade=self.session.automatic_shading
+            if rebuild or (enabled and shade.maps is None):
+                maps=build_shading_maps(mesh,self._texture_size,
+                    normal_map=normal,maes=self.session.maes_image)
+                changes.update(maps=maps,signature=geometry_signature(self.project))
+            self.session.configure_shading(**changes)
+        def done(_value):
+            self._sync_shading_controls()
+            self.status.set('Sombras e destaques atualizados. A pintura original fica preservada nas camadas.')
+        def failed(error):
+            self._sync_shading_controls()
+            self.shading_status.set(str(error))
+        self._queue_edit(work,done,error_title='Sombreamento automático',failed=failed)
+
     def _choose_material(self,choice):
         self._set_color(choice.colour)
         self.material_name.set(choice.name)
@@ -1103,11 +1192,11 @@ class PaintingStudio(tk.Frame):
 
     def _undo(self):
         self._last=self._last_3d=None
-        self._queue_edit(self.session.undo,materials=True,layers=True)
+        self._queue_edit(self.session.undo,lambda _:self._sync_shading_controls(),materials=True,layers=True)
 
     def _redo(self):
         self._last=self._last_3d=None
-        self._queue_edit(self.session.redo,materials=True,layers=True)
+        self._queue_edit(self.session.redo,lambda _:self._sync_shading_controls(),materials=True,layers=True)
 
     def _save(self):
         self.status.set('Salvando projeto…')
