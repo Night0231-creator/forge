@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.4.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v3.0.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.4.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v3.0.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -181,3 +181,16 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Aplicar gera backups dos Albedos e MAES existentes antes de modificar os arquivos que alimentam TaleWeaverCmd/Unity. A pasta de staging não excede 2048 em nenhuma dimensão.
 - **A prévia ainda mostra Albedo; o metal/brilho/emissão devem ser verificados dentro do TaleSpire** após gerar novamente o .tsMod. O programa não altera a física/base 1×1.
 - [Manual da V2.4](docs/V2_4_LAYERED_MATERIALS.md).
+
+
+## V3.0.0 — Novo aplicativo unificado de pintura 3D
+
+A interface principal do executável foi redesenhada para colocar **pintura, projetos e exportação** no centro da experiência. O fluxo tem inspiração funcional na categoria de programas como Basecoat, com design e código próprios.
+
+- **Estúdio de Pintura** é a nova tela inicial: lista de projetos convertidos, miniatura texturizada grande ao centro e ações laterais de Pintar, Preparar .tsMod e Instalar no TaleSpire.
+- Clique em **Pintar miniatura** para abrir o editor **na própria área de trabalho**, sem uma segunda janela. O botão **← Projetos** volta à biblioteca com confirmação de perda de alterações não salvas.
+- **Editor V3.0:** viewport 3D grande com pintura no modelo, câmera com botão direito, ferramentas à esquerda (pincéis, camadas, materiais) e **Mapa UV opcional**. O UV inicia recolhido para liberar espaço para o personagem.
+- **Importar Miniatura** abre o fluxo existente de conversão Meshy GLB/ZIP. Páginas técnicas e configuração de Blender/TaleWeaverCmd continuam acessíveis pelo menu **Mais opções**.
+- **Atalhos** e atualizador existentes continuam, com versões renomeadas para 3.0.0. Nenhum .tsMod pré-existente é alterado ao abrir o estúdio.
+- Esta versão muda a experiência visual, mas mantém o **renderizador CPU**, o motor de pintura V2.4, materiais MAES e os mesmos limites de seleção por UV. Não inclui todos os recursos do Basecoat.
+- [Guia do novo estúdio V3.0](docs/V3_0_UNIFIED_WORKSPACE.md).
