@@ -62,7 +62,7 @@ class UnifiedStudioTests(unittest.TestCase):
 
     def test_version(self):
         from core.version import APP_VERSION
-        self.assertEqual(APP_VERSION,'3.0.0')
+        self.assertEqual(APP_VERSION,'3.1.0')
 
 
 if __name__=='__main__':

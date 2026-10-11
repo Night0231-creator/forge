@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V3.0.0.
+"""Astronyx Mini Forge Studio V3.1.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -623,6 +623,14 @@ def run_packaged_selftest(report_file: str) -> int:
     for name, path in paths.items():
         result['checked'][name] = path.is_file() and path.stat().st_size > 0
     try:
+        import moderngl
+        import glcontext
+        result['gpu_runtime'] = 'ModernGL importado; hardware OpenGL 3.3 verificado ao renderizar'
+        result['checked']['gpu_runtime_packaged'] = True
+    except ImportError as exc:
+        result['checked']['gpu_runtime_packaged'] = False
+        result['gpu_error'] = str(exc)
+    try:
         tcl = tk.Tcl()
         result['tcl_version'] = str(tcl.eval('info patchlevel'))
         result['checked']['tcl'] = True
@@ -643,7 +651,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 3.0.0')
+            print('Astronyx Mini Forge Studio 3.1.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''

@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v3.0.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v3.1.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v3.0.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v3.1.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -194,3 +194,13 @@ A interface principal do executável foi redesenhada para colocar **pintura, pro
 - **Atalhos** e atualizador existentes continuam, com versões renomeadas para 3.0.0. Nenhum .tsMod pré-existente é alterado ao abrir o estúdio.
 - Esta versão muda a experiência visual, mas mantém o **renderizador CPU**, o motor de pintura V2.4, materiais MAES e os mesmos limites de seleção por UV. Não inclui todos os recursos do Basecoat.
 - [Guia do novo estúdio V3.0](docs/V3_0_UNIFIED_WORKSPACE.md).
+
+
+## V3.1.0 — GPU PBR Preview (Windows 10/11)
+
+- **Aceleração opcional por GPU**: ModernGL (OpenGL 3.3+) renderiza a miniatura para um framebuffer fora da tela. Uma thread própria mantém o contexto vivo; a janela Tk mostra o frame pronto.
+- **PBR aproximado na prévia**: shader usa Albedo, MAES (metálico R, AO G, emissão B, suavidade A), normais disponíveis, luz direcional, Fresnel/GGX e tone mapping. Não altera o arquivo final.
+- Na janela Painting Studio há **GPU / PBR**, sliders **Luz** e **Emissão**. Ao pintar ou aplicar preset, a prévia atualiza o material na GPU.
+- **Fallback automático**: drivers sem OpenGL 3.3 continuam com renderizador CPU de Albedo. O status no viewer informa qual modo foi usado.
+- Prévia limitada a 150 mil triângulos e 900x900 pixels por frame; renderização GPU + cópia GPU→Tk não garantem 60 FPS.
+- PyInstaller inclui ModernGL e glcontext; CI Windows testa código, aplicativo empacotado, instalador e ZIP portátil. [Guia V3.1](docs/V3_1_GPU_PBR_PREVIEW.md).

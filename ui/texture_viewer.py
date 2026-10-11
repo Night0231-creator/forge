@@ -6,15 +6,18 @@ render is computed off the Tk thread. Blender export pipeline is untouched.
 from __future__ import annotations
 
 import queue
-import threading
+from concurrent.futures import ThreadPoolExecutor
 import tkinter as tk
 from pathlib import Path
+import numpy as np
+from PIL import Image
 
 from core.preview import ObjViewer
 
 try:
     from PIL import ImageTk
     from .texture_renderer import load_obj, read_albedo, draw, PreviewError
+    from .gpu_pbr_renderer import render_preview, gpu_available
     TEXTURE_PREVIEW_AVAILABLE = True
 except ImportError:
     ImageTk = None
@@ -29,12 +32,19 @@ class TexturedObjViewer(ObjViewer):
         self.pan_y = 0.
         self._mesh = None
         self._albedo = None
+        self._maes = None
+        self._normal_map = None
+        self.pbr_gpu_enabled = True
+        self.light_intensity = 1.0
+        self.emission_intensity = 1.0
+        self._backend_label = 'Prévia'
         self._texture_image = None
         self._preview_status = ''
         self._paint_ticket = 0
         self._scheduled = None
         self._worker_busy = False
         self._events = queue.Queue()
+        self._pool = ThreadPoolExecutor(max_workers=1,thread_name_prefix='AstronyxGPU')
         self._poll_job = None
         super().__init__(parent, **kwargs)
         self.bind('<ButtonPress-3>', self._start_drag)
@@ -44,6 +54,8 @@ class TexturedObjViewer(ObjViewer):
     def open(self, file: Path):
         self._mesh = None
         self._albedo = None
+        self._maes = None
+        self._normal_map = None
         self._preview_status = ''
         super().open(file)
         if not TEXTURE_PREVIEW_AVAILABLE:
@@ -53,12 +65,63 @@ class TexturedObjViewer(ObjViewer):
         try:
             self._mesh = load_obj(file)
             self._albedo = read_albedo(self._mesh.texture_path)
+            self._maes = self._read_map(self._map_file(file,'MAES'),4)
+            self._normal_map = self._read_map(self._map_file(file,'Normal'),3)
             if self._mesh.limited:
                 self._preview_status = 'Prévia limitada a 150 mil triângulos; não altera o arquivo final.'
             else:
-                self._preview_status = 'Textura albedo + UV · prévia CPU'
+                self._preview_status = 'Albedo + MAES · GPU automática / CPU reserva'
         except (OSError, ValueError, MemoryError) as exc:
             self._preview_status = str(exc)
+        self.render()
+
+    @staticmethod
+    def _map_file(obj,kind):
+        obj=Path(obj)
+        names=(('MAES.png','metallic_ao_emis_smoothness.png')
+               if kind=='MAES' else ('Normal.png','normals.png'))
+        for folder in (obj.parent,obj.parent.parent/'TaleWeaverLite',
+                       obj.parent.parent/'Entrada_TaleWeaverCmd'):
+            for name in names:
+                p=folder/name
+                if p.is_file():
+                    return p
+        return None
+
+    @staticmethod
+    def _read_map(path,components):
+        if path is None:
+            return None
+        with Image.open(path) as raw:
+            if raw.width*raw.height > 4096*4096:
+                raise PreviewError('Textura de material excede 4096x4096.')
+            if components==4:
+                data=raw.convert('RGBA')
+            else:
+                data=raw.convert('RGB')
+            data.thumbnail((1024,1024),Image.Resampling.LANCZOS)
+            return np.asarray(data,dtype=np.uint8).copy()
+
+    def set_materials(self,maes=None,normal=None):
+        """Refresh on-GPU materials without altering exported texture files."""
+        if maes is not None:
+            if isinstance(maes,Image.Image):
+                copy=maes.convert('RGBA')
+                copy.thumbnail((1024,1024),Image.Resampling.LANCZOS)
+                self._maes=np.asarray(copy,dtype=np.uint8).copy()
+            else:
+                self._maes=np.asarray(maes,dtype=np.uint8).copy()
+        if normal is not None:
+            self._normal_map=np.asarray(normal,dtype=np.uint8).copy()
+        self.render()
+
+    def set_lighting(self,*,light=None,emission=None,gpu=None):
+        if light is not None:
+            self.light_intensity=max(0.,min(4.,float(light)))
+        if emission is not None:
+            self.emission_intensity=max(0.,min(5.,float(emission)))
+        if gpu is not None:
+            self.pbr_gpu_enabled=bool(gpu)
         self.render()
 
     def _project(self, xyz, width, height, center, units):
@@ -90,7 +153,7 @@ class TexturedObjViewer(ObjViewer):
             self.create_text(15,35,anchor='nw',text=self._preview_status,
                              fill='#E6D7FF',font=('Segoe UI',9))
         if self.display_mode == 'textured' and self._mesh is not None and self._albedo is not None:
-            self._scheduled = self.after(250, self._start_texture)
+            self._scheduled = self.after(90 if self.pbr_gpu_enabled else 250, self._start_texture)
 
     def _start_texture(self):
         self._scheduled = None
@@ -101,22 +164,27 @@ class TexturedObjViewer(ObjViewer):
         ticket = self._paint_ticket
         width = min(720,max(160,self.winfo_width()))
         height = min(720,max(160,self.winfo_height()))
-        args=(self._mesh,self._albedo,self.yaw,self.pitch,self.zoom,width,height,
-              self.pan_x,self.pan_y,False,self.compare_reference,1.75)
+        args=(self._mesh,self._albedo,self._maes,self._normal_map,
+              self.yaw,self.pitch,self.zoom,width,height,self.pan_x,self.pan_y,
+              self.compare_reference,self.light_intensity,self.emission_intensity,
+              not self.pbr_gpu_enabled)
         self._worker_busy = True
 
         def worker():
             try:
-                result = draw(*args)
-                self._events.put((ticket,result,None))
+                frame,status=render_preview(*args)
+                self._events.put((ticket,frame,status,None))
             except Exception as exc:
-                self._events.put((ticket,None,str(exc)))
-        threading.Thread(target=worker,daemon=True).start()
+                self._events.put((ticket,None,None,str(exc)))
+        try:
+            self._pool.submit(worker)
+        except RuntimeError:
+            self._worker_busy=False
 
     def _poll(self):
         try:
             while True:
-                ticket,image,error = self._events.get_nowait()
+                ticket,image,backend,error = self._events.get_nowait()
                 self._worker_busy=False
                 if ticket != self._paint_ticket or self.display_mode != 'textured':
                     # A newer camera position wins. Do not display obsolete frames.
@@ -128,6 +196,7 @@ class TexturedObjViewer(ObjViewer):
                     self.display_mode='geometry'
                     self.render()
                 elif image is not None and ImageTk is not None:
+                    self._backend_label=backend or 'Prévia'
                     self._texture_image=ImageTk.PhotoImage(image,master=self)
                     width,height=self.winfo_width(),self.winfo_height()
                     self.delete('all')
@@ -138,8 +207,8 @@ class TexturedObjViewer(ObjViewer):
                                          text=f'{self.stats.vertices:,} vértices · {self.stats.faces:,} faces',
                                          fill='#F4F2FF',font=('Consolas',10))
                     self.create_text(12,max(height-15,1),anchor='sw',
-                                     text='Albedo + UV · arraste para girar · referência humanoide visual 1×1' if self.compare_reference else
-                                          'Albedo + UV · arraste para girar · botão direito: mover · roda: zoom',
+                                     text=(self._backend_label+' · Referência 1×1' if self.compare_reference
+                                          else self._backend_label+' · botão direito: girar · roda: zoom'),
                                      fill='#D6CAE8',font=('Segoe UI',9))
         except queue.Empty:
             pass
@@ -148,6 +217,17 @@ class TexturedObjViewer(ObjViewer):
                 self._poll_job=self.after(100,self._poll)
         except tk.TclError:
             return
+
+    def destroy(self):
+        if self._poll_job is not None:
+            try: self.after_cancel(self._poll_job)
+            except tk.TclError: pass
+            self._poll_job=None
+        if self._scheduled is not None:
+            try: self.after_cancel(self._scheduled)
+            except tk.TclError: pass
+        self._pool.shutdown(wait=False,cancel_futures=True)
+        super().destroy()
 
     def toggle_reference(self):
         """Toggle the comparative visual ruler in textured preview only."""
