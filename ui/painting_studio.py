@@ -88,6 +88,7 @@ class PaintingStudio(tk.Frame):
         self._worker_picker_state = None
         self._stroke_id = 0
         self._make_ui()
+        self._cache_controls()
         self._render_texture()
         self._schedule_preview()
         self._queue_edit(lambda:None,materials=True)
@@ -97,6 +98,8 @@ class PaintingStudio(tk.Frame):
     def destroy(self):
         """Cancel pending renders when a project closes or switches."""
         self._closing_edit=self._edits.close(drain=self._persistent_edits>0)
+        for variable,trace in getattr(self,'_control_traces',[]):
+            variable.trace_remove('write',trace)
         for name in ('_refresh_id', '_preview_job', '_edit_job'):
             job = getattr(self, name, None)
             if job is not None:
@@ -164,8 +167,9 @@ class PaintingStudio(tk.Frame):
 
     def _camera_snapshot(self):
         viewer = self.viewer
+        width,height=viewer.viewport_size
         options = dict(yaw=viewer.yaw,pitch=viewer.pitch,zoom=viewer.zoom,
-            canvas_width=viewer.winfo_width(),canvas_height=viewer.winfo_height(),
+            canvas_width=width,canvas_height=height,
             pan_x=viewer.pan_x,pan_y=viewer.pan_y,show_reference=viewer.compare_reference,
             preview_limit=viewer.projection_limit)
         return viewer._mesh,options,(id(viewer._mesh),*options.values())
@@ -180,14 +184,35 @@ class PaintingStudio(tk.Frame):
         return self._worker_picker
 
     def _paint_options(self):
-        return (self.color.get(),self.size.get(),self.opacity.get()/100,
-                self.hardness.get()/100,self.paint_through.get(),self._finish_options())
+        v=self._control_values
+        return (v['color'],v['size'],v['opacity']/100,v['hardness']/100,
+                v['paint_through'],self._finish_options())
 
     def _finish_options(self):
-        if not self.paint_material.get():
+        v=self._control_values
+        if not v['paint_material']:
             return None
         # AO is retained from the imported model while painting its finish.
-        return tuple(int(self._material_channels[i].get()) for i in (0,2,3))
+        return tuple(int(v['material_'+str(i)]) for i in (0,2,3))
+
+    def _cache_controls(self):
+        """Update plain values when a setting changes, not on every pointer event.
+
+        Tcl calls release the GIL; repeated variable reads can wait behind
+        CPU painting on Windows. Each trace reads only its changed variable.
+        """
+        names=('mode','color','size','opacity','hardness','paint_through',
+               'paint_material','paint3d_enabled','region_mode','region_angle',
+               'tolerance','stamp_name')
+        controls=[(name,getattr(self,name)) for name in names]
+        controls.extend(('material_'+str(i),self._material_channels[i]) for i in (0,2,3))
+        self._control_values={}
+        self._control_traces=[]
+        for name,variable in controls:
+            def changed(*_args,key=name,var=variable):
+                self._control_values[key]=var.get()
+            changed()
+            self._control_traces.append((variable,variable.trace_add('write',changed)))
 
     @staticmethod
     def _extend_path(path,points):
@@ -354,7 +379,7 @@ class PaintingStudio(tk.Frame):
         self._paint_tab=paint
         self._build_palette(paint)
         self._brush_settings=tk.Frame(paint,bg=PANEL)
-        self._brush_settings.pack(fill='x')
+        self._brush_settings.pack(fill='x',before=self._palette_library)
         self._section(self._brush_settings,'Pincel')
         settings=tk.Frame(self._brush_settings,bg=PANEL)
         settings.pack(fill='x',padx=14,pady=(0,3))
@@ -480,8 +505,9 @@ class PaintingStudio(tk.Frame):
             return 'break'
 
     def _brush_motion(self,event):
-        enabled=self.paint3d_enabled.get() and self.mode.get() in ('pincel','borracha','carimbo')
-        diameter=max(4,self.size.get()*2) if self.mode.get()=='carimbo' else self.size.get()
+        v=self._control_values
+        enabled=v['paint3d_enabled'] and v['mode'] in ('pincel','borracha','carimbo')
+        diameter=max(4,v['size']*2) if v['mode']=='carimbo' else v['size']
         self.viewer.set_brush_cursor(event.x,event.y,diameter if enabled else 0)
 
     def _frame_model(self):
@@ -495,7 +521,7 @@ class PaintingStudio(tk.Frame):
         self.tool_tabs.select(0)
         self.viewer.clear_brush_cursor()
         if current in ('pincel','borracha','carimbo'):
-            self._brush_settings.pack(fill='x',before=self.surface_options)
+            self._brush_settings.pack(fill='x',before=self._palette_library)
         else:
             self._brush_settings.pack_forget()
         for frame,modes in ((self._region_options,('regiao','balde')),
@@ -530,6 +556,9 @@ class PaintingStudio(tk.Frame):
         self._label(finish,'',textvariable=self.finish_caption,color=MUTED,size=9).pack(anchor='w')
         self._check(finish,'Pintar acabamento junto da cor',self.paint_material).pack(anchor='w',pady=5)
         self._button(finish,'Escolher material',lambda:self.tool_tabs.select(1)).pack(fill='x',pady=(0,3))
+        self._palette_library=tk.Frame(tab,bg=PANEL)
+        self._palette_library.pack(fill='x')
+        tab=self._palette_library
         self._section(tab,'Biblioteca de cores')
         self.palette_query=tk.StringVar(value='')
         self.palette_category='Cores'
@@ -859,7 +888,7 @@ class PaintingStudio(tk.Frame):
             messagebox.showerror('Carimbo inválido',str(error),parent=self)
 
     def _stamp_settings(self):
-        shape=self.stamp_name.get()
+        shape=self._control_values['stamp_name']
         custom=self.stamp_image if shape=='PNG personalizado' else None
         if shape=='PNG personalizado' and custom is None:
             self.status.set('Carregue um PNG antes de usar o carimbo personalizado.')
@@ -878,7 +907,7 @@ class PaintingStudio(tk.Frame):
         self._last=None
         if point is None:
             return
-        mode=self.mode.get()
+        mode=self._control_values['mode']
         if mode=='conta-gotas':
             self._queue_edit(lambda:self.session.pick(*point),self._set_color)
             return
@@ -886,7 +915,7 @@ class PaintingStudio(tk.Frame):
             self._pick_region(point)
             return
         options=self._paint_options()
-        tolerance=self.tolerance.get()
+        tolerance=self._control_values['tolerance']
         stamp=self._stamp_settings() if mode=='carimbo' else None
         if mode=='carimbo' and stamp is None:
             return
@@ -911,7 +940,7 @@ class PaintingStudio(tk.Frame):
             return
         path=[self._last,point]
         options=self._paint_options()
-        erase=self.mode.get()=='borracha'
+        erase=self._control_values['mode']=='borracha'
         self._last=point
         def work():
             color,size,opacity,hardness,_,material=options
@@ -984,13 +1013,13 @@ class PaintingStudio(tk.Frame):
         self.viewer.focus_set()
         self._brush_motion(event)
         self._last_3d=None
-        if not self.paint3d_enabled.get():
+        if not self._control_values['paint3d_enabled']:
             self.viewer._start_drag(event)
             return
-        mode=self.mode.get()
+        mode=self._control_values['mode']
         camera=self._camera_snapshot()
         options=self._paint_options()
-        region=(self.region_mode.get(),self.region_angle.get(),self.tolerance.get())
+        region=tuple(self._control_values[name] for name in ('region_mode','region_angle','tolerance'))
         stamp=self._stamp_settings() if mode=='carimbo' else None
         if mode=='carimbo' and stamp is None:
             return
@@ -1037,16 +1066,16 @@ class PaintingStudio(tk.Frame):
 
     def _paint3d_drag(self,event):
         self._brush_motion(event)
-        if not self.paint3d_enabled.get():
+        if not self._control_values['paint3d_enabled']:
             self.viewer._drag(event)
             return
-        if self._last_3d is None or self.mode.get() not in ('pincel','borracha'):
+        if self._last_3d is None or self._control_values['mode'] not in ('pincel','borracha'):
             return
         screen=(event.x,event.y)
         path=[self._last_3d,screen]
         self._last_3d=screen
         camera,options=self._camera_snapshot(),self._paint_options()
-        erase=self.mode.get()=='borracha'
+        erase=self._control_values['mode']=='borracha'
         stroke_id=self._stroke_id
         def work():
             if getattr(self,'_worker_stroke_id',None)!=stroke_id:

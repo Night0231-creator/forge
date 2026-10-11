@@ -107,6 +107,24 @@ class DesktopSurfaceTests(unittest.TestCase):
         with Image.open(self.panel.session.material_draft) as saved:
             self.assertEqual(saved.convert('RGBA').tobytes(),material.tobytes())
 
+    def test_pointer_events_use_cached_settings_and_traces_are_removed_on_close(self):
+        from contextlib import ExitStack
+        self.panel.size.set(26);self.panel.opacity.set(80);self.panel.paint_material.set(True)
+        self.assertEqual(self.panel._paint_options()[1:3],(26,.8))
+        traces=list(self.panel._control_traces)
+        event=self.event()
+        with ExitStack() as stack:
+            for variable,_ in traces:
+                stack.enter_context(patch.object(variable,'get',side_effect=AssertionError('Tcl read during pointer event')))
+            self.panel._paint3d_start(event)
+            self.panel._paint3d_drag(SimpleNamespace(x=event.x+10,y=event.y))
+            self.panel._paint3d_end(event)
+            self.wait_edits()
+        self.assertTrue(self.panel.session.maes_dirty)
+        self.panel.destroy()
+        for variable,trace in traces:
+            self.assertNotIn(trace,str(variable.trace_info()))
+
     def test_automatic_bucket_can_fill_a_second_part_without_clearing_selection(self):
         self.panel.region_angle.set(0)
         self.panel.mode.set('balde')

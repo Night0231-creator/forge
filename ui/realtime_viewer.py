@@ -271,6 +271,7 @@ class RealtimeObjViewer(tk.Frame):
         self.last_render_ms=0.
         self.upload_bytes=0
         self.brush_cursor=None
+        self.viewport_size=(kw.get('width',740),kw.get('height',620))
         if (OpenGLFrame is not None and (os.name=='nt' or tk.TkVersion<9)
                 and os.environ.get('ASTRONYX_LEGACY_PREVIEW')!='1'):
             self._native=NativeSurface(self,self,width=kw.get('width',740),height=kw.get('height',620))
@@ -282,12 +283,16 @@ class RealtimeObjViewer(tk.Frame):
         self.bind('<Button-4>',lambda _e:self._zoom(1.13))
         self.bind('<Button-5>',lambda _e:self._zoom(1/1.13))
         super().bind('<Map>',lambda _e:self.render(),add='+')
+        super().bind('<Configure>',self._viewport_resize,add='+')
         self._notify('GPU nativa · preparando' if not self._failed else 'Prévia compatível')
 
     @property
     def projection_limit(self):
         from ui.studio_scene import PREVIEW_LIMIT
         return PREVIEW_LIMIT if self._using_fallback else None
+
+    def _viewport_resize(self,event):
+        self.viewport_size=(event.width,event.height)
 
     def bind(self,sequence=None,func=None,add=None):
         result=super().bind(sequence,func,add)
