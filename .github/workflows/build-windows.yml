@@ -30,7 +30,7 @@ jobs:
       - name: Instalar dependencias do visualizador de texturas
         run: python -m pip install pillow numpy tkinterdnd2 moderngl glcontext pyopengltk==0.0.4 PyOpenGL==3.1.10
       - name: Testar motor preservado
-        run: python -m unittest discover -s tests -v
+        run: python -X faulthandler -m unittest discover -s tests -v
       - name: Validar pintura na janela real e recuperacao de GPU
         run: python tools/validate_native_viewport.py --report dist/validation-native-window.json --screenshot dist/native-window.png
       - name: Instalar Inno Setup 6
@@ -110,7 +110,7 @@ jobs:
       - name: Dependencias de pre-visualizacao
         run: python -m pip install pillow numpy tkinterdnd2 moderngl glcontext pyopengltk==0.0.4 PyOpenGL==3.1.10
       - name: Testes de compatibilidade em runtime Windows anterior
-        run: python -m unittest discover -s tests -v
+        run: python -X faulthandler -m unittest discover -s tests -v
       - name: Validar inicio sem desktop grafico
         run: python studio.py --version
 

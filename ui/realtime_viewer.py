@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import time
 import tkinter as tk
 from pathlib import Path
@@ -108,7 +109,7 @@ if OpenGLFrame is not None:
             try:
                 super().tkMap(event)
                 self.viewer.render()
-            except Exception as exc:
+            except (Exception, SystemExit) as exc:
                 self.viewer._native_failed(exc)
 
         def tkResize(self,event):
@@ -121,8 +122,17 @@ if OpenGLFrame is not None:
         def initgl(self):
             if self.ctx is not None:
                 return
+            # Windows without a vendor driver exposes Microsoft's OpenGL 1.1.
+            # Detect it before ModernGL queries modern entry points; some old
+            # drivers terminate the process rather than raising a Python error.
+            from OpenGL import GL
+            version=GL.glGetString(GL.GL_VERSION)
+            match=re.match(rb'(\d+)\.(\d+)',version or b'')
+            if not match or tuple(map(int,match.groups()))<(3,3):
+                raise RuntimeError('OpenGL 3.3 indisponível; usar prévia compatível.')
             import moderngl
-            self.ctx=moderngl.create_context(require=330)
+            from _moderngl import DefaultLoader
+            self.ctx=moderngl.create_context(require=330,context=DefaultLoader())
             self.gpu=GPUPreview(self.ctx,fragment_shader=NATIVE_FS)
             for shader in (BACKGROUND_FS,CURSOR_FS):
                 program=self.ctx.program(vertex_shader=FULLSCREEN_VS,fragment_shader=shader)

@@ -1,6 +1,7 @@
 """Render/picking alignment, incremental uploads and idle-budget regressions."""
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import numpy as np
@@ -10,11 +11,22 @@ from core.layered_materials import LayeredPaintSession
 from ui.gpu_pbr_renderer import GPUPreview
 from ui.paint3d_picker import ProjectedUVPicker
 from ui.realtime_policy import FrameBudget, TextureDamage
-from ui.realtime_viewer import RealtimeObjViewer, NATIVE_FS, texture_patch, preview_size
+from ui.realtime_viewer import RealtimeObjViewer, NATIVE_FS, texture_patch, preview_size, OpenGLFrame
 from ui.texture_renderer import TextureMesh
 
 
 class RealtimePolicyTests(unittest.TestCase):
+    @unittest.skipIf(OpenGLFrame is None,'Native runtime unavailable')
+    def test_old_driver_is_rejected_before_moderngl_initializes(self):
+        from ui.realtime_viewer import NativeSurface
+        surface=NativeSurface.__new__(NativeSurface)
+        surface.ctx=None
+        for version in (None,b'1.1.0',b'3.2 Mesa'):
+            with patch('OpenGL.GL.glGetString',return_value=version), \
+                    patch('moderngl.create_context') as create:
+                with self.assertRaises(RuntimeError):surface.initgl()
+                create.assert_not_called()
+
     def test_frame_limit_and_adaptation_are_bounded(self):
         b=FrameBudget()
         b.record(1.,20.)
