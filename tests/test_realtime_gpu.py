@@ -128,5 +128,22 @@ class RealtimeGPUTests(unittest.TestCase):
         result=np.frombuffer(texture.read(alignment=1),np.uint8).reshape(256,256,3)[::-1]
         np.testing.assert_array_equal(result,np.asarray(v._paint_source))
 
+    def test_material_patches_keep_data_alpha_and_reuse_the_gpu_texture(self):
+        from types import SimpleNamespace
+        v=SimpleNamespace(_using_fallback=False,_maes=None,_material_damage=[],
+                          _material_pending=False,upload_bytes=0,render=lambda:None)
+        full=np.zeros((256,256,4),np.uint8);full[:]=(230,137,25,0)
+        RealtimeObjViewer.update_materials(v,full)
+        RealtimeObjViewer._upload_materials(v,self.gpu)
+        texture=self.gpu.tex_cache['maes'][1];before=v.upload_bytes
+        patch=np.zeros((10,12,4),np.uint8);patch[:]=(40,137,220,255)
+        RealtimeObjViewer.update_materials(v,patches=[((20,25,32,35),patch)])
+        RealtimeObjViewer._upload_materials(v,self.gpu)
+        self.assertIs(texture,self.gpu.tex_cache['maes'][1])
+        self.assertEqual(v.upload_bytes-before,10*12*4)
+        result=np.frombuffer(texture.read(alignment=1),np.uint8).reshape(256,256,4)[::-1]
+        np.testing.assert_array_equal(result,v._maes)
+        self.assertEqual(tuple(result[0,0]),(230,137,25,0))
+
 
 if __name__=='__main__':unittest.main()

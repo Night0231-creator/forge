@@ -165,6 +165,7 @@ if OpenGLFrame is not None:
             owner=self.viewer
             if owner._mesh is not None and owner._albedo is not None:
                 owner._upload_paint(self.gpu)
+                owner._upload_materials(self.gpu)
                 selection=owner._selection_data
                 self.gpu._texture('selection',selection,1).use(location=3)
                 self.gpu.render_to(target,owner._mesh,owner._albedo,owner._maes,
@@ -255,6 +256,8 @@ class RealtimeObjViewer(tk.Frame):
         self._paint_source=None
         self._paint_pending=False
         self._damage=None
+        self._material_damage=[]
+        self._material_pending=False
         self._texture_max=2048
         self.yaw,self.pitch,self.zoom=.5,.24,1.
         self.pan_x=self.pan_y=0.
@@ -451,9 +454,44 @@ class RealtimeObjViewer(tk.Frame):
 
     def set_materials(self,maes=None,normal=None):
         self._maes=None if maes is None else np.asarray(maes.convert('RGBA') if isinstance(maes,Image.Image) else maes).copy()
+        self._material_pending=False
+        self._material_damage=[]
         if normal is not None:
             self._normal_map=np.asarray(normal).copy()
         self.render()
+
+    def update_materials(self,full=None,patches=()):
+        if full is not None:
+            self._maes=np.asarray(full,dtype=np.uint8).copy()
+            self._material_damage=None
+        elif patches and self._maes is not None:
+            if self._using_fallback:
+                self._maes=self._maes.copy()
+            for box,data in patches:
+                x0,y0,x1,y1=box
+                self._maes[y0:y1,x0:x1]=data
+            if self._material_damage is not None:
+                self._material_damage=sorted(set(self._material_damage+[tuple(box) for box,_ in patches]))
+        self._material_pending=not self._using_fallback
+        if self._using_fallback:
+            self._material_damage=[]
+        self.render()
+
+    def _upload_materials(self,gpu):
+        if not self._material_pending or self._maes is None:
+            return
+        texture=gpu._texture('maes',self._maes,4)
+        if self._material_damage is None:
+            self.upload_bytes+=self._maes.nbytes
+        else:
+            height=self._maes.shape[0]
+            for x0,y0,x1,y1 in self._material_damage:
+                data=self._maes[y0:y1,x0:x1]
+                texture.write(np.ascontiguousarray(np.flipud(data)).tobytes(),
+                              viewport=(x0,height-y1,x1-x0,y1-y0),alignment=1)
+                self.upload_bytes+=data.nbytes
+        self._material_pending=False
+        self._material_damage=[]
 
     def set_lighting(self,*,light=None,emission=None,gpu=None,ambient=None,environment=None):
         from ui.gpu_pbr_renderer import _validate_settings

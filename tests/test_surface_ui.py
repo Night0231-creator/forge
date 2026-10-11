@@ -84,6 +84,49 @@ class DesktopSurfaceTests(unittest.TestCase):
         self.assertEqual(self.panel.session.maes_image.getpixel((70,200)),(0,255,0,30))
         self.assertGreater(self.panel.viewer.winfo_width(),400)
 
+    def test_material_choice_is_captured_before_queued_brush_and_undo_save(self):
+        from core.material_palette import MATERIALS
+        gold=next(c for c in MATERIALS if c.name=='Ouro')
+        self.panel._choose_material(gold)
+        self.assertTrue(self.panel.paint_material.get())
+        gate=threading.Event();self.addCleanup(gate.set)
+        self.panel._queue_edit(lambda:gate.wait(5))
+        event=self.event()
+        self.panel._paint3d_start(event);self.panel._paint3d_end(event)
+        # Changing the current controls must not change an already queued stroke.
+        self.panel._choose_material(next(c for c in MATERIALS if c.name=='Couro'))
+        gate.set();self.wait_edits()
+        self.assertTrue(self.panel.session.maes_dirty)
+        material=self.panel.session.maes_image.copy()
+        pixels=list(material.getdata())
+        self.assertIn((gold.metallic,255,gold.emission,gold.smoothness),pixels)
+        self.assertNotIn((0,255,0,70),pixels)
+        self.panel._undo();self.wait_edits()
+        self.assertFalse(self.panel.session.maes_dirty)
+        self.panel._redo();self.panel._save();self.wait_edits()
+        with Image.open(self.panel.session.material_draft) as saved:
+            self.assertEqual(saved.convert('RGBA').tobytes(),material.tobytes())
+
+    def test_automatic_bucket_can_fill_a_second_part_without_clearing_selection(self):
+        self.panel.region_angle.set(0)
+        self.panel.mode.set('balde')
+        # The fixture is coplanar, so use a separate disconnected second face.
+        from ui.texture_renderer import TextureMesh
+        import numpy as np
+        old=self.panel.viewer._mesh
+        points=np.vstack((old.points,old.points[[0,2,3]]+np.array([3,0,0])))
+        faces=np.array([[0,1,2],[4,5,6]],np.int32)
+        self.panel.viewer._mesh=TextureMesh(points,faces,old.texcoords,old.texture_path)
+        self.panel.viewer.yaw=self.panel.viewer.pitch=0
+        picker=self.panel._picker_for_camera()
+        for index,colour in ((0,'#FF0000'),(1,'#0000FF')):
+            self.panel.color.set(colour)
+            self.panel._paint3d_start(SimpleNamespace(x=float(picker.x[index].mean()),y=float(picker.y[index].mean())))
+            self.wait_edits()
+            self.assertIsNone(self.panel.session.selection)
+        self.assertEqual(self.panel.session.pick(70,200),'#FF0000')
+        self.assertEqual(self.panel.session.pick(180,65),'#0000FF')
+
     def test_closing_editor_cancels_pending_texture_and_preview_renders(self):
         self.panel._request_refresh()
         self.panel._schedule_preview()

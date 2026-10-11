@@ -62,6 +62,10 @@ def validate(require_native=False):
             if require_native and not native:raise AssertionError('Native viewport unavailable')
             def run_phase(backend):
                 panel.mode.set('pincel');panel.size.set(80)
+                panel.paint_material.set(True)
+                finish=(220,80,190) if not report['phases'] else (0,0,70)
+                for index,value in zip((0,2,3),finish):
+                    panel._material_channels[index].set(value)
                 panel.color.set('#FF0000' if not report['phases'] else '#0000FF')
                 if backend=='compatible':
                     panel.viewer.set_lighting(gpu=False)
@@ -96,6 +100,7 @@ def validate(require_native=False):
                 started=time.perf_counter()
                 x=panel.viewer.winfo_width()*.5;y=panel.viewer.winfo_height()*.55
                 before=panel.session.image.getpixel((2048,2048))
+                before_material=panel.session.maes_image.getpixel((2048,2048))
                 def invoke(method,event):
                     begin=time.perf_counter();method(event);callbacks.append((time.perf_counter()-begin)*1000)
                 invoke(panel._paint3d_start,SimpleNamespace(x=x,y=y))
@@ -109,12 +114,17 @@ def validate(require_native=False):
                 until(lambda:delivered[0]);settle(panel)
                 painted=panel.session.image.tobytes()
                 assert panel.session.image.getpixel((2048,2048))[:3]==ImageColor.getrgb(panel.color.get())
+                painted_material=panel.session.maes_image.getpixel((2048,2048))
+                assert painted_material==(finish[0],255,finish[1],finish[2])
                 clock[0]=time.perf_counter()  # exclude this validator's full-4K byte comparisons
                 stage[0]='undo';panel._undo();settle(panel)
                 assert panel.session.image.getpixel((2048,2048))==before
+                assert panel.session.maes_image.getpixel((2048,2048))==before_material
                 stage[0]='redo/save';panel._redo();panel._save();settle(panel)
                 assert panel.session.image.tobytes()==painted
                 with Image.open(panel.saved) as saved:assert saved.convert('RGBA').tobytes()==painted
+                with Image.open(panel.session.material_draft) as saved:
+                    assert saved.convert('RGBA').getpixel((2048,2048))==painted_material
                 clock[0]=time.perf_counter()
                 stage[0]='geometry';panel.mode.set('regiao');panel.region_mode.set('Geometria')
                 invoke(panel._paint3d_start,SimpleNamespace(x=x,y=y));settle(panel)
@@ -131,7 +141,8 @@ def validate(require_native=False):
                     'heartbeat_p95_ms':round(float(np.percentile(intervals[1:],95)),2),
                     'heartbeat_max_ms':round(max(intervals[1:]),2),
                     'seconds':round(time.perf_counter()-started,2),
-                    'paint_undo_redo_save_selection':True,'slow_heartbeat':list(peaks),
+                    'paint_undo_redo_save_selection':True,'material_brush_ao_undo_save':True,
+                    'slow_heartbeat':list(peaks),
                     'main_callbacks_ms':{name:round(value,2) for name,value in observed.items()}}
                 report['phases'].append(phase)
                 if phase['max_callback_ms']>100 or phase['heartbeat_max_ms']>350:

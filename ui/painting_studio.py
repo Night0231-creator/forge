@@ -24,6 +24,7 @@ from ui.realtime_viewer import preview_size
 
 from core.paint_studio import find_albedo
 from core.layered_materials import LayeredPaintSession, PRESETS, apply_materials_to_export
+from core.material_palette import MATERIALS
 from core.footprint_calibrator import find_project_obj
 from ui.texture_viewer import TexturedObjViewer
 from ui.realtime_viewer import RealtimeObjViewer
@@ -52,6 +53,8 @@ class PaintingStudio(tk.Frame):
         self.tolerance = tk.IntVar(value=12)
         self.hardness = tk.IntVar(value=75)
         self.paint_through = tk.BooleanVar(value=False)
+        self.paint_material = tk.BooleanVar(value=False)
+        self.finish_caption = tk.StringVar(value='Acabamento: Aço escovado')
         self.region_mode = tk.StringVar(value='Geometria')
         self.region_angle = tk.IntVar(value=35)
         self._regions = None
@@ -155,7 +158,7 @@ class PaintingStudio(tk.Frame):
             self._display_damage.mark(box)
         self._display_selection = update.selection
         if update.material_changed:
-            self.viewer.set_materials(update.materials)
+            self.viewer.update_materials(update.materials,update.material_patches)
         self._request_refresh()
         self._schedule_preview()
 
@@ -178,7 +181,13 @@ class PaintingStudio(tk.Frame):
 
     def _paint_options(self):
         return (self.color.get(),self.size.get(),self.opacity.get()/100,
-                self.hardness.get()/100,self.paint_through.get())
+                self.hardness.get()/100,self.paint_through.get(),self._finish_options())
+
+    def _finish_options(self):
+        if not self.paint_material.get():
+            return None
+        # AO is retained from the imported model while painting its finish.
+        return tuple(int(self._material_channels[i].get()) for i in (0,2,3))
 
     @staticmethod
     def _extend_path(path,points):
@@ -201,7 +210,7 @@ class PaintingStudio(tk.Frame):
         picker = self._worker_projection(camera)
         if picker is None:
             return
-        color,size,opacity,hardness,through = options
+        color,size,opacity,hardness,through,material = options
         patches = []
         pairs = list(zip(path,path[1:])) or [(path[0],path[0])]
         for start,end in pairs:
@@ -213,7 +222,7 @@ class PaintingStudio(tk.Frame):
                 patches.extend(surface_masks(picker,a,b,self._texture_size,
                     diameter=size*(2 if stencil is not None else 1),hardness=hardness,
                     paint_through=through,stencil=stencil))
-        self.session.apply_surface_masks(patches,color,opacity,erase)
+        self.session.apply_surface_masks(patches,color,opacity,erase,material)
 
     def _worker_region(self,hit,model,mode,angle,tolerance):
         if mode == 'Cor similar':
@@ -292,8 +301,8 @@ class PaintingStudio(tk.Frame):
         body.pack(fill='both',expand=True,padx=12,pady=12)
         body.grid_rowconfigure(0,weight=1)
         body.grid_columnconfigure(0,minsize=52)
-        body.grid_columnconfigure(1,weight=1,minsize=320)
-        body.grid_columnconfigure(2,minsize=300)
+        body.grid_columnconfigure(1,minsize=300)
+        body.grid_columnconfigure(2,weight=1,minsize=320)
         body.grid_columnconfigure(3,minsize=0)
 
         self.tool_rail=tk.Frame(body,bg=SIDEBAR,width=52,
@@ -318,7 +327,7 @@ class PaintingStudio(tk.Frame):
 
         self.tools_dock=tk.Frame(body,bg=PANEL,width=300,
                                  highlightbackground=BORDER,highlightthickness=1)
-        self.tools_dock.grid(row=0,column=2,sticky='ns',padx=(10,0))
+        self.tools_dock.grid(row=0,column=1,sticky='ns',padx=(0,10))
         self.tools_dock.pack_propagate(False)
         self.tool_caption=tk.StringVar(value='Pincel')
         inspector_title=tk.Frame(self.tools_dock,bg=PANEL)
@@ -357,7 +366,7 @@ class PaintingStudio(tk.Frame):
         self._build_materials_tab(materials)
 
         self.viewport_panel=tk.Frame(body,bg=SIDEBAR,highlightbackground=BORDER,highlightthickness=1)
-        self.viewport_panel.grid(row=0,column=1,sticky='nsew')
+        self.viewport_panel.grid(row=0,column=2,sticky='nsew')
         camera=tk.Frame(self.viewport_panel,bg=SIDEBAR,height=42)
         camera.pack(fill='x')
         camera.pack_propagate(False)
@@ -516,6 +525,11 @@ class PaintingStudio(tk.Frame):
         field.bind('<Return>',lambda _e:self._commit_colour())
         Tooltip(field,'Cor hexadecimal  ·  Enter para aplicar')
         self._button(chosen,'Editar',self._choose_color).pack(side='right')
+        finish=tk.Frame(tab,bg=PANEL)
+        finish.pack(fill='x',padx=14,pady=(10,0))
+        self._label(finish,'',textvariable=self.finish_caption,color=MUTED,size=9).pack(anchor='w')
+        self._check(finish,'Pintar acabamento junto da cor',self.paint_material).pack(anchor='w',pady=5)
+        self._button(finish,'Escolher material',lambda:self.tool_tabs.select(1)).pack(fill='x',pady=(0,3))
         self._section(tab,'Biblioteca de cores')
         self.palette_query=tk.StringVar(value='')
         self.palette_category='Cores'
@@ -735,7 +749,18 @@ class PaintingStudio(tk.Frame):
         self._button(self._stamp_options,'Carregar PNG…',self._load_custom_stamp).pack(fill='x')
 
     def _build_materials_tab(self,tab):
-        self._label(tab,'Material da região',bold=True,size=10).pack(anchor='w',padx=12,pady=(12,8))
+        self._section(tab,'Biblioteca de materiais')
+        library=tk.Frame(tab,bg=PANEL)
+        library.pack(fill='x',padx=12,pady=(2,8))
+        self.material_tiles=[]
+        for column in range(3):
+            library.grid_columnconfigure(column,weight=1,uniform='material')
+        from ui.material_tiles import MaterialTile
+        for index,choice in enumerate(MATERIALS):
+            tile=MaterialTile(library,choice,lambda c=choice:self._choose_material(c))
+            tile.grid(row=index//3,column=index%3,sticky='ew',padx=2,pady=3)
+            self.material_tiles.append(tile)
+        self._section(tab,'Acabamento personalizado')
         self.material_name=tk.StringVar(value=list(PRESETS)[0])
         menu=ttk.Combobox(tab,values=list(PRESETS),textvariable=self.material_name,
                           state='readonly',style='PaintStudio.TCombobox')
@@ -746,8 +771,11 @@ class PaintingStudio(tk.Frame):
         for title,variable in zip(('Metal','Oclusão','Emissão','Suavidade'),self._material_channels):
             slider(settings,title,variable,maximum=255,percent=True)
         menu.bind('<<ComboboxSelected>>',self._material_preset_selected)
-        self._label(tab,'Selecione uma região no modelo e aplique o material.',
+        self._check(tab,'Pintar acabamento junto da cor',self.paint_material).pack(anchor='w',padx=10,pady=5)
+        self._label(tab,'Pincel, balde e carimbo usam a cor ativa e o acabamento escolhido. '
+                    'A oclusão do modelo é preservada durante os traços.',
                     color=MUTED,wraplength=230,size=9).pack(anchor='w',padx=12,pady=10)
+        self._button(tab,'Voltar ao pincel',lambda:self.mode.set('pincel')).pack(fill='x',padx=11,pady=4)
         self._button(tab,'Aplicar na região',self._apply_material,highlight=True).pack(fill='x',padx=11,pady=4)
         self._button(tab,'Limpar seleção',self._clear_region).pack(fill='x',padx=11,pady=4)
         availability=('Textura de material pronta' if self.session.maes_image is not None
@@ -758,6 +786,22 @@ class PaintingStudio(tk.Frame):
     def _material_preset_selected(self,_event=None):
         for variable,value in zip(self._material_channels,PRESETS[self.material_name.get()]):
             variable.set(value)
+        self.finish_caption.set('Acabamento: '+self.material_name.get())
+        self.paint_material.set(True)
+        for tile in self.material_tiles:
+            tile.set_selected(False)
+
+    def _choose_material(self,choice):
+        self._set_color(choice.colour)
+        self.material_name.set(choice.name)
+        # Keep the original AO slider available for explicit region edits.
+        for index,value in zip((0,2,3),choice.finish):
+            self._material_channels[index].set(value)
+        self.finish_caption.set('Acabamento: '+choice.name)
+        for tile in self.material_tiles:
+            tile.set_selected(tile.choice==choice)
+        self.paint_material.set(True)
+        self.status.set(choice.name+' pronto. Pinte no 3D ou use o balde para preencher uma parte.')
 
     def _apply_material(self):
         values=tuple(int(v.get()) for v in self._material_channels)
@@ -848,15 +892,16 @@ class PaintingStudio(tk.Frame):
             return
         self._stroke_id+=1
         def work():
-            color,size,opacity,hardness,_=options
+            color,size,opacity,hardness,_,material=options
             self.session.checkpoint()
             if mode=='balde':
-                self.session.bucket(*point,color,tolerance)
+                self.session.bucket(*point,color,tolerance,material)
             elif mode=='carimbo':
                 self.session.stamp(*point,color,diameter=max(4,size*2),opacity=opacity,
-                                   shape=stamp[0],custom=stamp[1])
+                                   shape=stamp[0],custom=stamp[1],material=material)
             else:
-                self.session.stroke(point,point,color,size,opacity,erase=mode=='borracha',hardness=hardness)
+                self.session.stroke(point,point,color,size,opacity,erase=mode=='borracha',hardness=hardness,
+                                    material=material)
         self._queue_edit(work)
         self._last=point if mode in ('pincel','borracha') else None
 
@@ -869,9 +914,9 @@ class PaintingStudio(tk.Frame):
         erase=self.mode.get()=='borracha'
         self._last=point
         def work():
-            color,size,opacity,hardness,_=options
+            color,size,opacity,hardness,_,material=options
             for start,end in zip(path,path[1:]):
-                self.session.stroke(start,end,color,size,opacity,erase=erase,hardness=hardness)
+                self.session.stroke(start,end,color,size,opacity,erase=erase,hardness=hardness,material=material)
         self._queue_edit(work,key=('uv',self._stroke_id,options,erase),
                          merge=lambda points:self._extend_path(path,points),payload=path)
 
@@ -966,9 +1011,16 @@ class PaintingStudio(tk.Frame):
             self.session.checkpoint()
             self._worker_stroke_id=stroke_id
             if mode=='balde':
-                if region[0]=='Geometria' and self.session.selection is None:
-                    self._worker_region(hit,camera[0],*region)
-                self.session.bucket(*point,options[0],region[2])
+                automatic=region[0]=='Geometria' and self.session.selection is None
+                try:
+                    if automatic:
+                        self._worker_region(hit,camera[0],*region)
+                    self.session.bucket(*point,options[0],region[2],options[5])
+                finally:
+                    # A bucket click identifies its own part; only an explicit
+                    # selection stays locked for later clicks and brush strokes.
+                    if automatic:
+                        self.session.clear_region()
             else:
                 stencil=None if stamp is None else stamp_mask(128,stamp[0],stamp[1])
                 self._worker_surface(camera,[screen],options,mode=='borracha',stencil)
