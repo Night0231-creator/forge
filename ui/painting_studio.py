@@ -28,16 +28,12 @@ PURPLE = '#8E65EB'
 GREEN = '#64DAB1'
 
 
-class PaintingStudio(tk.Toplevel):
-    def __init__(self, parent, project: str | Path, on_apply=None):
+class PaintingStudio(tk.Frame):
+    def __init__(self, parent, project: str | Path, on_apply=None, on_exit=None):
         self.project = Path(project).resolve()
         self.session = LayeredPaintSession(find_albedo(self.project),self.project)
-        super().__init__(parent)
-        self.title('Astronyx • Painting Studio — Camadas & Materiais V2.4')
-        self.configure(bg=BG)
-        self.geometry('1320x800')
-        self.minsize(1080,680)
-        self.transient(parent)
+        super().__init__(parent,bg=BG)
+        self.on_exit = on_exit
         self.mode = tk.StringVar(value='pincel')
         self.color = tk.StringVar(value='#8E65EB')
         self.size = tk.IntVar(value=20)
@@ -75,58 +71,49 @@ class PaintingStudio(tk.Toplevel):
                          font=('Segoe UI',10,'bold'))
 
     def _make_ui(self):
-        top=tk.Frame(self,bg=BG)
-        top.pack(fill='x',padx=18,pady=(14,10))
-        self._label(top,'ASTRONYX / PAINTING STUDIO',size=19,bold=True).pack(side='left')
-        self._label(top,'Pintura 3D por UV • prévia CPU • exportação TaleSpire',
-                    color=MUTED).pack(side='right')
+        """Unified dock: tools / broad 3D canvas / collapsible UV inspector."""
+        sty=ttk.Style(self)
+        sty.configure('PaintStudio.TNotebook',background=PANEL,borderwidth=0)
+        sty.configure('PaintStudio.TNotebook.Tab',background=FIELD,foreground=TEXT,
+                      font=('Segoe UI',9,'bold'),padding=(11,9))
+        sty.map('PaintStudio.TNotebook.Tab',
+                background=[('selected',PURPLE)],foreground=[('selected','#FFFFFF')])
+
+        header=tk.Frame(self,bg='#111525',height=63)
+        header.pack(fill='x')
+        header.pack_propagate(False)
+        line=tk.Frame(header,bg='#111525')
+        line.pack(fill='both',expand=True,padx=14)
+        if self.on_exit is not None:
+            self._button(line,'← Projetos',self.on_exit).pack(side='left',padx=(0,14))
+        self._label(line,'◈ ASTRONYX  /  PAINT STUDIO',color=TEXT,size=15,bold=True).pack(
+            side='left',pady=13)
+        self._label(line,'PINTURA 3D • V3.0',color='#B89EFA',size=9,bold=True).pack(
+            side='left',padx=14)
+        self._button(line,'Exportar texturas',self._apply,highlight=True).pack(
+            side='right',pady=10)
+        self._button(line,'Salvar projeto',self._save).pack(side='right',padx=8,pady=10)
+
+        footer=tk.Frame(self,bg='#111525',height=41)
+        footer.pack(side='bottom',fill='x')
+        footer.pack_propagate(False)
+        self._label(footer,'',color=MUTED,textvariable=self.status,wraplength=1100,
+                    size=9).pack(side='left',fill='x',expand=True,padx=16,pady=10)
 
         body=tk.Frame(self,bg=BG)
-        body.pack(fill='both',expand=True,padx=16)
-        left=tk.Frame(body,bg=PANEL,width=390)
-        left.pack(side='left',fill='both',expand=True,padx=(0,10))
-        self._label(left,'PINTURA DIRETA NO 3D',bold=True).pack(anchor='w',padx=12,pady=10)
-        self.viewer = TexturedObjViewer(left,width=390,height=540)
-        self.viewer.compare_reference = False
-        self.viewer.pack(fill='both',expand=True,padx=8)
-        try:
-            self.viewer.open(find_project_obj(self.project))
-        except (ValueError, OSError) as exc:
-            self._label(left,str(exc),color=MUTED,wraplength=370).pack(padx=12)
-        self.viewer.bind('<ButtonPress-1>',self._paint3d_start)
-        self.viewer.bind('<B1-Motion>',self._paint3d_drag)
-        self.viewer.bind('<ButtonRelease-1>',self._paint3d_end)
-        # With 3D paint active the right mouse button rotates the miniature.
-        self.viewer.bind('<ButtonPress-3>',self.viewer._start_drag)
-        self.viewer.bind('<B3-Motion>',self.viewer._drag)
-        self.viewer.bind('<ButtonRelease-3>',lambda _e:setattr(self.viewer,'last_mouse',None))
-        tk.Checkbutton(left,text='Pintar diretamente no modelo 3D',
-                       variable=self.paint3d_enabled,bg=PANEL,fg=TEXT,selectcolor=FIELD,
-                       activebackground=PANEL,activeforeground=TEXT).pack(anchor='w',padx=12,pady=(6,2))
-        self._label(left,'Esquerdo: pintar ou selecionar cor • direito: girar • roda: zoom. '
-                    'Desmarque para usar o botão esquerdo para girar.',
-                    color=MUTED,wraplength=370).pack(anchor='w',padx=12,pady=(0,12))
+        body.pack(fill='both',expand=True,padx=10,pady=10)
+        body.grid_rowconfigure(0,weight=1)
+        body.grid_columnconfigure(0,minsize=244,weight=0)
+        body.grid_columnconfigure(1,weight=1,minsize=460)
+        body.grid_columnconfigure(2,minsize=0,weight=0)
 
-        center=tk.Frame(body,bg=PANEL,width=590)
-        center.pack(side='left',fill='both',expand=True,padx=(0,10))
-        self._label(center,'PINTURA NA TEXTURA UV',bold=True).pack(anchor='w',padx=12,pady=10)
-        self.canvas=tk.Canvas(center,width=570,height=570,bg='#111524',
-                              highlightthickness=1,highlightbackground='#464063')
-        self.canvas.pack(fill='both',expand=True,padx=10,pady=(0,9))
-        self.canvas.bind('<ButtonPress-1>',self._mouse_down)
-        self.canvas.bind('<B1-Motion>',self._mouse_drag)
-        self.canvas.bind('<ButtonRelease-1>',lambda _e:setattr(self,'_last',None))
-        self.canvas.bind('<Configure>',lambda _e:self._request_refresh())
-        tk.Checkbutton(center,text='Mostrar contornos UV (não são pintados)',
-                       variable=self.show_uv,command=self._request_refresh,
-                       bg=PANEL,fg=TEXT,selectcolor=FIELD,activebackground=PANEL,
-                       activeforeground=TEXT).pack(anchor='w',padx=10,pady=(0,12))
-
-        right_container=tk.Frame(body,bg=PANEL,width=280)
-        right_container.pack(side='right',fill='y')
-        right_container.pack_propagate(False)
-        tabs=ttk.Notebook(right_container)
-        tabs.pack(fill='both',expand=True,pady=(6,0))
+        # Left tool and layer docks.
+        tools=tk.Frame(body,bg=PANEL,width=246,highlightbackground='#303754',
+                       highlightthickness=1)
+        tools.grid(row=0,column=0,sticky='ns',padx=(0,9))
+        tools.grid_propagate(False)
+        tabs=ttk.Notebook(tools,style='PaintStudio.TNotebook')
+        tabs.pack(fill='both',expand=True,pady=5,padx=5)
         right=tk.Frame(tabs,bg=PANEL)
         layers_tab=tk.Frame(tabs,bg=PANEL)
         materials_tab=tk.Frame(tabs,bg=PANEL)
@@ -135,46 +122,111 @@ class PaintingStudio(tk.Toplevel):
         tabs.add(materials_tab,text='Materiais')
         self._build_layers_tab(layers_tab)
         self._build_materials_tab(materials_tab)
-        self._label(right,'FERRAMENTAS',bold=True).pack(anchor='w',padx=14,pady=(14,8))
-        for title,key in (('Pincel livre','pincel'),('Balde de cores','balde'),
-                          ('Conta-gotas','conta-gotas'),('Restaurar original','borracha'),
-                          ('Selecionar região similar','regiao')):
+        self._label(right,'PINTURA',bold=True,color='#BFA7FF').pack(
+            anchor='w',padx=12,pady=(10,8))
+        for title,key in (('Pincel','pincel'),('Preenchimento','balde'),
+                          ('Conta-gotas','conta-gotas'),('Borracha','borracha'),
+                          ('Selecionar região','regiao')):
             tk.Radiobutton(right,text=title,value=key,variable=self.mode,
                            bg=PANEL,fg=TEXT,selectcolor=FIELD,
                            activebackground=PANEL,activeforeground=TEXT,
-                           anchor='w').pack(fill='x',padx=14,pady=3)
-        self._label(right,'Tamanho do pincel',color=MUTED).pack(anchor='w',padx=14,pady=(13,0))
+                           anchor='w',font=('Segoe UI',10)).pack(fill='x',padx=11,pady=4)
+        self._label(right,'TAMANHO',color=MUTED,size=9,bold=True).pack(
+            anchor='w',padx=12,pady=(14,0))
         tk.Scale(right,from_=1,to=100,orient='horizontal',variable=self.size,
-                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(fill='x',padx=12)
-        self._label(right,'Opacidade (%)',color=MUTED).pack(anchor='w',padx=14,pady=(6,0))
+                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(
+            fill='x',padx=9)
+        self._label(right,'OPACIDADE',color=MUTED,size=9,bold=True).pack(
+            anchor='w',padx=12,pady=(6,0))
         tk.Scale(right,from_=10,to=100,orient='horizontal',variable=self.opacity,
-                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(fill='x',padx=12)
-        self._label(right,'Tolerância do balde',color=MUTED).pack(anchor='w',padx=14,pady=(6,0))
+                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(
+            fill='x',padx=9)
+        self._label(right,'SIMILARIDADE',color=MUTED,size=9,bold=True).pack(
+            anchor='w',padx=12,pady=(6,0))
         tk.Scale(right,from_=0,to=50,orient='horizontal',variable=self.tolerance,
-                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(fill='x',padx=12)
-        self._label(right,'PALETA',bold=True).pack(anchor='w',padx=14,pady=(10,8))
+                 bg=PANEL,fg=TEXT,troughcolor=FIELD,highlightthickness=0).pack(
+            fill='x',padx=9)
+        self._label(right,'PALETA RÁPIDA',bold=True,size=9,color=MUTED).pack(
+            anchor='w',padx=12,pady=(10,6))
         palette=tk.Frame(right,bg=PANEL)
-        palette.pack(padx=14,anchor='w')
+        palette.pack(padx=12,anchor='w')
         for i,(name,code) in enumerate(PALETTE.items()):
-            b=tk.Button(palette,bg=code,width=3,height=1,relief='flat',
-                        command=lambda c=code:self._set_color(c))
-            b.grid(row=i//4,column=i%4,padx=4,pady=3)
-            # Color description remains accessible on hover.
-            b.bind('<Enter>',lambda _e,n=name:self.status.set('Material / cor: '+n))
-        self._button(right,'Escolher cor…',self._choose_color).pack(fill='x',padx=14,pady=(10,5))
+            swatch=tk.Button(palette,bg=code,width=3,height=1,relief='flat',
+                            command=lambda c=code:self._set_color(c))
+            swatch.grid(row=i//4,column=i%4,padx=3,pady=3)
+            swatch.bind('<Enter>',lambda _e,n=name:self.status.set('Material / cor: '+n))
+        self._button(right,'Escolher cor…',self._choose_color).pack(
+            fill='x',padx=11,pady=(11,5))
         actions=tk.Frame(right,bg=PANEL)
-        actions.pack(fill='x',padx=10,pady=(5,10))
-        self._button(actions,'Desfazer',self._undo).pack(side='left',padx=3)
-        self._button(actions,'Refazer',self._redo).pack(side='left',padx=3)
-        self._label(right,'Selecione uma região no 3D ou no atlas UV para aplicar material somente nela.',
-                    color=MUTED,wraplength=245).pack(fill='x',padx=12,pady=(5,0))
+        actions.pack(fill='x',padx=8,pady=(6,10))
+        self._button(actions,'↶ Desfazer',self._undo).pack(side='left',padx=3)
+        self._button(actions,'↷ Refazer',self._redo).pack(side='left',padx=3)
 
-        footer=tk.Frame(self,bg=BG)
-        footer.pack(fill='x',padx=18,pady=12)
-        self._label(footer,'',color=MUTED,textvariable=self.status,
-                    wraplength=780).pack(side='left',fill='x',expand=True)
-        self._button(footer,'Salvar rascunho',self._save).pack(side='right',padx=(8,0))
-        self._button(footer,'Aplicar na exportação',self._apply,highlight=True).pack(side='right')
+        # The 3D model now dominates the window instead of sharing space 50/50.
+        viewport=tk.Frame(body,bg='#121626',highlightbackground='#303754',
+                          highlightthickness=1)
+        viewport.grid(row=0,column=1,sticky='nsew')
+        vheader=tk.Frame(viewport,bg='#1B2032',height=46)
+        vheader.pack(fill='x')
+        vheader.pack_propagate(False)
+        self._label(vheader,'VISUALIZAÇÃO 3D',bold=True,color=TEXT,size=10).pack(
+            side='left',padx=13,pady=12)
+        self.show_uv_editor=tk.BooleanVar(value=False)
+        tk.Checkbutton(vheader,text='Mostrar mapa UV',variable=self.show_uv_editor,
+                       command=self._toggle_uv_panel,bg='#1B2032',fg=TEXT,
+                       selectcolor=FIELD,activebackground='#1B2032',
+                       activeforeground=TEXT).pack(side='right',padx=13)
+        self.viewer=TexturedObjViewer(viewport,width=640,height=580)
+        self.viewer.compare_reference=False
+        self.viewer.pack(fill='both',expand=True,padx=5,pady=5)
+        try:
+            self.viewer.open(find_project_obj(self.project))
+        except (OSError,ValueError) as exc:
+            self._label(viewport,str(exc),color=MUTED,wraplength=580).pack(pady=8)
+        self.viewer.bind('<ButtonPress-1>',self._paint3d_start)
+        self.viewer.bind('<B1-Motion>',self._paint3d_drag)
+        self.viewer.bind('<ButtonRelease-1>',self._paint3d_end)
+        self.viewer.bind('<ButtonPress-3>',self.viewer._start_drag)
+        self.viewer.bind('<B3-Motion>',self.viewer._drag)
+        self.viewer.bind('<ButtonRelease-3>',
+                         lambda _e:setattr(self.viewer,'last_mouse',None))
+        vfoot=tk.Frame(viewport,bg='#1B2032')
+        vfoot.pack(fill='x')
+        self.paint3d_enabled=tk.BooleanVar(value=True)
+        tk.Checkbutton(vfoot,text='Pintar no 3D',variable=self.paint3d_enabled,
+                       bg='#1B2032',fg='#8FE7C3',selectcolor=FIELD,
+                       activebackground='#1B2032',activeforeground=TEXT).pack(
+            side='left',padx=13,pady=8)
+        self._label(vfoot,'Esquerdo: pintar   •   Direito: girar   •   Roda: zoom',
+                    color=MUTED,size=9).pack(side='right',padx=13)
+
+        # Optional UV inspector. Hidden by default to maximize model area.
+        self.uv_panel=tk.Frame(body,bg=PANEL,width=295,
+                               highlightbackground='#303754',highlightthickness=1)
+        self.uv_panel.grid(row=0,column=2,sticky='nsew',padx=(9,0))
+        self.uv_panel.grid_propagate(False)
+        self._label(self.uv_panel,'MAPA UV  /  ALBEDO',bold=True,color=TEXT,size=10).pack(
+            anchor='w',padx=12,pady=(14,10))
+        self.canvas=tk.Canvas(self.uv_panel,width=278,height=400,
+                              bg='#101423',highlightbackground=FIELD,
+                              highlightthickness=1)
+        self.canvas.pack(fill='both',expand=True,padx=8,pady=(0,8))
+        self.canvas.bind('<ButtonPress-1>',self._mouse_down)
+        self.canvas.bind('<B1-Motion>',self._mouse_drag)
+        self.canvas.bind('<ButtonRelease-1>',lambda _e:setattr(self,'_last',None))
+        self.canvas.bind('<Configure>',lambda _e:self._request_refresh())
+        tk.Checkbutton(self.uv_panel,text='Bordas UV',variable=self.show_uv,
+                       command=self._request_refresh,bg=PANEL,fg=TEXT,
+                       selectcolor=FIELD,activebackground=PANEL,
+                       activeforeground=TEXT).pack(anchor='w',padx=10,pady=(0,12))
+        self.uv_panel.grid_remove()
+
+    def _toggle_uv_panel(self):
+        if self.show_uv_editor.get():
+            self.uv_panel.grid()
+            self._request_refresh()
+        else:
+            self.uv_panel.grid_remove()
 
     def _build_layers_tab(self,tab):
         self._label(tab,'CAMADAS DE ALBEDO',bold=True).pack(anchor='w',padx=12,pady=(14,5))
@@ -549,4 +601,17 @@ def _uv_edges(project: Path, max_lines: int = 3500):
 
 
 def open_painting_studio(parent,project: str | Path,on_apply=None):
-    return PaintingStudio(parent,project,on_apply=on_apply)
+    """Open as a complete studio window; embedded mode uses PaintingStudio directly."""
+    window=tk.Toplevel(parent)
+    window.title('Astronyx • Painting Studio V3.0')
+    window.configure(bg=BG)
+    window.geometry('1440x880')
+    window.minsize(1100,690)
+    try:
+        if window.tk.call('tk','windowingsystem') == 'win32':
+            window.state('zoomed')
+    except tk.TclError:
+        pass
+    panel=PaintingStudio(window,project,on_apply=on_apply,on_exit=window.destroy)
+    panel.pack(fill='both',expand=True)
+    return window

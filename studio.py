@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V2.4.0.
+"""Astronyx Mini Forge Studio V3.0.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -22,6 +22,7 @@ from core.version import APP_VERSION
 from ui import hud22
 from ui import theme as polish
 from ui.texture_viewer import TexturedObjViewer
+from ui.studio_workspace import UnifiedStudio
 from core.updater import find_update, download_installer, run_installer, UpdateError, is_portable
 from core.update_policy import AUTO_UPDATE_INTERVAL_MS, STARTUP_DELAY_MS, should_show_update
 from ui.rounded import RoundedNavButton
@@ -187,16 +188,17 @@ class Studio(UpdateInterface, legacy.Forge):
     viewer_class = TexturedObjViewer
     # Only the three daily tasks stay visible. Advanced pages remain supported.
     NAV = [
-        ('home', '⌂', 'Início', 'tab_dashboard'),
-        ('library', '▦', 'Meus modelos', 'tab_library'),
-        ('install', '↓', 'Instalar no TaleSpire', 'tab_tsmod'),
-        ('convert', '⬡', 'Conversão detalhada', 'tab_quick'),
-        ('studio', '◈', 'Prévia 3D', 'tab_preview'),
-        ('scale', '⚙', 'Ajustes avançados', 'tab_conv'),
+        ('home', '◈', 'Estúdio de Pintura', 'tab_workspace'),
+        ('quick', '＋', 'Importar Miniatura', 'tab_dashboard'),
+        ('library', '▦', 'Meus Projetos', 'tab_library'),
+        ('install', '↓', 'Instalar TaleSpire', 'tab_tsmod'),
+        ('convert', '⬡', 'Converter / Preparar', 'tab_quick'),
+        ('studio', '◎', 'Prévia Técnica', 'tab_preview'),
+        ('scale', '⚙', 'Modelagem Avançada', 'tab_conv'),
         ('export', '↗', 'Exportação / Unity', 'tab_cmd'),
-        ('help', '?', 'Ajuda', 'tab_guide'),
+        ('help', '?', 'Documentação', 'tab_guide'),
     ]
-    PRIMARY_NAV = frozenset(('home', 'library', 'install'))
+    PRIMARY_NAV = frozenset(('home', 'quick', 'library', 'install'))
 
     def __init__(self):
         self.library_entries: list[Miniature] = []
@@ -216,8 +218,8 @@ class Studio(UpdateInterface, legacy.Forge):
                 self.iconbitmap(str(legacy.BASE / 'assets' / 'astronyx.ico'))
             except tk.TclError:
                 pass
-        self.geometry('1280x840')
-        self.minsize(1020, 690)
+        self.geometry('1440x880')
+        self.minsize(1120, 720)
         self.after(80, self.refresh_library)
         self.bind('<Control-o>', lambda _event: self._pick_source())
         self.bind('<Control-l>', lambda _event: self._navigate('library', 'tab_library'))
@@ -314,7 +316,7 @@ class Studio(UpdateInterface, legacy.Forge):
         self.tabs = ttk.Notebook(view, style='StudioHidden.TNotebook')
         self.tabs.pack(fill='both', expand=True)
         for attr, label in [
-            ('tab_dashboard', 'Dashboard'), ('tab_quick', 'Converter'), ('tab_library', 'Biblioteca'),
+            ('tab_workspace', 'Pintura 3D'), ('tab_dashboard', 'Dashboard'), ('tab_quick', 'Converter'), ('tab_library', 'Biblioteca'),
             ('tab_preview', 'Prévia'), ('tab_conv', 'Ajustes'),
             ('tab_cmd', 'Exportar'), ('tab_tsmod', 'Instalar'),
             ('tab_guide', 'Ajuda')]:
@@ -348,8 +350,10 @@ class Studio(UpdateInterface, legacy.Forge):
         hud22.dashboard(self)
         hud22.inspector(self)
         self.viewer.add_preview_controls(self.tab_preview)
+        self.workspace=UnifiedStudio(self.tab_workspace,self)
+        self.workspace.pack(fill='both',expand=True)
         self.tabs.bind('<<NotebookTabChanged>>', self._tab_switched)
-        self._navigate('home', 'tab_dashboard')
+        self._navigate('home', 'tab_workspace')
         tk.Label(self, text='Ferramenta independente; não afiliada ao TaleSpire, Bouncyrock ou Meshy.',
                  bg=legacy.BG, fg='#656B85', font=('Segoe UI', 8)).pack(side='bottom', pady=(0, 4))
 
@@ -368,7 +372,8 @@ class Studio(UpdateInterface, legacy.Forge):
     def _tab_switched(self, _event=None):
         selected = self.tabs.select()
         page_titles = {
-            'tab_dashboard': ('Visão geral','Crie e acompanhe suas miniaturas em um só lugar.'),
+            'tab_workspace': ('Estúdio de Pintura','Importe, pinte e exporte sem trocar de aplicativo.'),
+            'tab_dashboard': ('Preparar miniatura','Escolha o GLB/ZIP e gere uma miniatura para pintar.'),
             'tab_preview': ('Studio 3D','Inspecione seu modelo, câmera e propriedades antes de exportar.'),
             'tab_library': ('Biblioteca','Todos os personagens preparados e seus arquivos .tsMod.'),
             'tab_quick': ('Nova conversão','Prepare um personagem do Meshy para o TaleSpire.'),
@@ -409,7 +414,7 @@ class Studio(UpdateInterface, legacy.Forge):
         try:
             model=parse_dropped_model(event.data, self.tk.splitlist)
             self._set_model_source(model)
-            self._navigate('home','tab_dashboard')
+            self._navigate('quick','tab_dashboard')
         except ValueError as exc:
             messagebox.showwarning('Arquivo Meshy inválido',str(exc))
         return 'break'
@@ -515,6 +520,8 @@ class Studio(UpdateInterface, legacy.Forge):
         self.library_entries=scan_library(self.target.get(),max_items=100)
         self._render_library_entries()
         hud22.refresh_dashboard(self)
+        if hasattr(self,'workspace'):
+            self.workspace.refresh(self.library_entries,preferred=self.last_output)
 
     def _library_row(self, item: Miniature):
         box = tk.Frame(self.library_frame, bg=PANEL, highlightbackground=legacy.BORDER,
@@ -636,7 +643,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 2.4.0')
+            print('Astronyx Mini Forge Studio 3.0.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''
