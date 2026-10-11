@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V3.2.0.
+"""Astronyx Mini Forge Studio V4.0.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -282,9 +282,8 @@ class Studio(UpdateInterface, legacy.Forge):
 
         main = tk.Frame(body, bg=legacy.BG)
         main.pack(side='left', fill='both', expand=True)
-        hero = tk.Frame(main, bg=polish.PANEL, height=80)
+        hero = tk.Frame(main, bg=polish.PANEL, height=106)
         hero.pack(fill='x')
-        self.hero_bar=hero
         hero.pack_propagate(False)
         left = tk.Frame(hero, bg=polish.PANEL)
         left.pack(side='left', fill='both', expand=True, padx=(24, 4), pady=(17, 9))
@@ -303,7 +302,6 @@ class Studio(UpdateInterface, legacy.Forge):
 
         status = tk.Frame(main, bg=legacy.BG)
         status.pack(fill='x', padx=22, pady=(13, 0))
-        self.status_bar=status
         self.status_label = tk.Label(status, bg=legacy.BG, fg=MUTED,
                                     font=('Segoe UI', 10), anchor='w')
         self.status_label.pack(side='left', fill='x', expand=True)
@@ -311,8 +309,7 @@ class Studio(UpdateInterface, legacy.Forge):
                             compact=True).pack(side='right')
 
         view = tk.Frame(main, bg=legacy.BG)
-        self.view_container=view
-        view.pack(fill='both', expand=True, padx=6, pady=(1, 6))
+        view.pack(fill='both', expand=True, padx=18, pady=(11, 14))
         sty = ttk.Style(self)
         sty.layout('StudioHidden.TNotebook.Tab', [])
         sty.configure('StudioHidden.TNotebook', background=legacy.BG, borderwidth=0)
@@ -385,17 +382,6 @@ class Studio(UpdateInterface, legacy.Forge):
             'tab_tsmod': ('Instalar miniatura','Adicione seu personagem à biblioteca local do TaleSpire.'),
             'tab_guide': ('Ajuda e tutorial','Dicas de importação, conversão e instalação.')
         }
-        if selected==str(self.tab_workspace):
-            # The painting desk has its own compact toolbar; suppress the
-            # duplicated 106px hero and status strips in this page only.
-            self.hero_bar.pack_forget()
-            self.status_bar.pack_forget()
-        else:
-            if not self.hero_bar.winfo_manager():
-                self.hero_bar.pack(fill='x',before=self.view_container)
-            if not self.status_bar.winfo_manager():
-                self.status_bar.pack(fill='x',padx=22,pady=(9,0),
-                                     before=self.view_container)
         for attr, (title,subtitle) in page_titles.items():
             if selected==str(getattr(self,attr)):
                 self.page_title.set(title)
@@ -665,7 +651,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 3.2.0')
+            print('Astronyx Mini Forge Studio 4.0.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''
