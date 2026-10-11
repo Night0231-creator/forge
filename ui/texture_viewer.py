@@ -58,6 +58,7 @@ class TexturedObjViewer(ObjViewer):
         self._albedo = None
         self._maes = None
         self._normal_map = None
+        self._texture_image = None
         self._preview_status = ''
         super().open(file)
         if not TEXTURE_PREVIEW_AVAILABLE:
@@ -167,6 +168,18 @@ class TexturedObjViewer(ObjViewer):
             self.create_text(12,max(height-15,1),anchor='sw',
                              text=self._backend_label+' · prévia em atualização',
                              fill='#D6CAE8',font=('Segoe UI',9))
+        elif textured:
+            # An asynchronous frame may take a moment; show a clear loading
+            # state rather than the misleading dark 1600-face geometry view.
+            self.delete('all')
+            width,height=self.winfo_width(),self.winfo_height()
+            self.create_rectangle(0,0,width,height,fill='#151A29',outline='')
+            self.create_text(width//2,height//2-13,
+                             text='Preparando prévia colorida…',
+                             fill='#D8C4FF',font=('Segoe UI',13,'bold'))
+            self.create_text(width//2,height//2+15,
+                             text='Renderização GPU ou CPU de reserva',
+                             fill='#9EA9C2',font=('Segoe UI',10))
         else:
             super().render()
             if self.display_mode == 'wireframe':
