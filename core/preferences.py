@@ -38,6 +38,8 @@ def load_preferences(path: Path) -> dict:
         'tsmod_folder': settings.get('tsmod_folder', ''),
         'reference_tsmod': settings.get('reference_tsmod', ''),
         'auto_import_preset': settings.get('auto_import_preset', True) is True,
+        'unity_project': settings.get('unity_project', ''),
+        'unity_auto_import': settings.get('unity_auto_import', False) is True,
     }
 
 
@@ -48,7 +50,8 @@ def save_preferences(path: Path, *, output_root: str, blender: str,
                      auto_scale: bool = True, target_height: str = "1.75",
                      install_after_conversion: bool = False, tsmod_folder: str = "",
                      auto_update_check: bool = True,
-                     reference_tsmod: str = '', auto_import_preset: bool = True) -> None:
+                     reference_tsmod: str = '', auto_import_preset: bool = True,
+                     unity_project: str = '', unity_auto_import: bool = False) -> None:
     """Save app preferences atomically without touching projects or models."""
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
@@ -67,6 +70,8 @@ def save_preferences(path: Path, *, output_root: str, blender: str,
         'tsmod_folder': tsmod_folder,
         'reference_tsmod': str(reference_tsmod),
         'auto_import_preset': bool(auto_import_preset),
+        'unity_project': str(unity_project),
+        'unity_auto_import': bool(unity_auto_import),
     }
     temporary = path.with_name(path.name + '.tmp')
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
