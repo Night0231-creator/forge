@@ -119,6 +119,20 @@ class MaterialWorkbenchTests(unittest.TestCase):
         # Source changed after applying; do not overlay the paint layers twice.
         self.assertFalse(self.session().restored_layers)
 
+    def test_undoing_material_does_not_resurrect_older_maes_draft(self):
+        s=self.session()
+        s.select_region(4,4)
+        s.apply_material('Ouro polido')
+        s.save_draft(self.root)
+        self.assertTrue((self.root/'Pintura/MAES_editado.png').exists())
+        self.assertTrue(s.undo())
+        self.assertFalse(s.maes_dirty)
+        s.save_draft(self.root)
+        fresh=self.session()
+        self.assertTrue(fresh.restored_layers)
+        self.assertFalse(fresh.maes_dirty)
+        self.assertEqual(fresh.maes_image.getpixel((4,4)),(4,210,5,50))
+
     def test_insecure_draft_and_unknown_preset_fail(self):
         s=self.session()
         s.select_region(1,1)
