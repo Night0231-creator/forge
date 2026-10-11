@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.12-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.13-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.12.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.13.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -133,3 +133,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Suporte opcional a arrastar/soltar nativo Windows com TkDND integrado ao pacote. Se indisponível, use o seletor padrão.
 - O fluxo de um clique usa Blender + TaleWeaverCmd local. Unity/TaleWeaverLite continua como preparação opcional com etapa final manual, até validar automação no editor.
 - [Manual V2.2.12](docs/V2_2_12_SIMPLE_IMPORT.md).
+
+
+## V2.2.13 — Unity Bridge
+
+- Selecione uma vez o projeto TaleWeaverLite no Unity Hub e ative a importação automática após a conversão.
+- Cria Assets/AstronyxImports com OBJ ancorado, Albedo/Normal/MAES e script C# que gera material e prefab de prévia.
+- Importar último modelo no Unity reutiliza uma conversão anterior.
+- O .tsMod ainda exige salvar manualmente no TaleWeaverLite; escala 1x1 e movimento precisam de validação no jogo.
+- [Manual da V2.2.13](docs/V2_2_13_UNITY_BRIDGE.md).
