@@ -48,7 +48,7 @@ class UnityBridgeTests(unittest.TestCase):
             original=(source/'TaleWeaverCmd_Source/Eclipse Warlord.obj').read_bytes()
             first=import_into_unity_project(source,unity)
             target=Path(first['import_path'])
-            self.assertTrue(target.is_relative_to(unity/'Assets/AstronyxImports'))
+            self.assertTrue(target.is_relative_to(unity.resolve()/'Assets/AstronyxImports'))
             self.assertEqual(first['default_scale'],1)
             self.assertEqual(first['preview_scale'],1.0)
             self.assertIs(first['tsmod_created'],False)
@@ -103,7 +103,7 @@ class UnityBridgeTests(unittest.TestCase):
                 with patch('core.unity_bridge.subprocess.Popen') as proc:
                     open_unity_project(unity)
                     args=proc.call_args.args[0]
-                    self.assertEqual(args,[str(editor.resolve()),'-projectPath',str(unity)])
+                    self.assertEqual(args,[str(editor.resolve()),'-projectPath',str(unity.resolve())])
                     self.assertNotIn('shell',proc.call_args.kwargs)
 
     def test_project_auto_detection_is_bounded(self):
@@ -111,7 +111,7 @@ class UnityBridgeTests(unittest.TestCase):
             base=Path(tmp)
             unity=self.make_unity(base/'TaleWeaverLite')
             with patch.dict(os.environ,{'ASTRONYX_TALEWEAVER_PROJECT':str(unity)}):
-                self.assertEqual(find_taleweaverlite_project(),unity)
+                self.assertEqual(find_taleweaverlite_project(),unity.resolve())
 
     def test_rejects_symlinked_asset_root(self):
         with tempfile.TemporaryDirectory() as tmp:
