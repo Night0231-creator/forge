@@ -63,6 +63,20 @@ class TestPreferences(unittest.TestCase):
                              open_after_conversion=True,auto_import_preset=False)
             self.assertIs(load_preferences(path)['auto_import_preset'],False)
 
+    def test_unity_project_opt_in_is_persistent_and_disabled_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'settings.json'
+            defaults=load_preferences(path)
+            self.assertFalse(defaults['unity_auto_import'])
+            self.assertEqual(defaults['unity_project'],'')
+            save_preferences(path, output_root=tmp,blender='',
+                             open_after_conversion=True,
+                             unity_project=r'C:\\Projects\\TaleWeaverLite',
+                             unity_auto_import=True)
+            settings=load_preferences(path)
+            self.assertTrue(settings['unity_auto_import'])
+            self.assertEqual(settings['unity_project'],r'C:\\Projects\\TaleWeaverLite')
+
     def test_corrupt_settings_do_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'settings.json'

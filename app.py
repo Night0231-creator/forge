@@ -29,6 +29,9 @@ from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
 from core.quality_notes import quality_notes
 from core.taleweaverlite_handoff import prepare_taleweaverlite_handoff
+from core.unity_bridge import (find_unity_editor, find_taleweaverlite_project,
+                               validate_unity_project, import_into_unity_project,
+                               open_unity_project)
 from core.version import APP_VERSION
 from core.scale_profile import is_meshy_model, preset_values, BASECOAT_VISUAL_PRESET_NAME, suggested_calibration_height
 from ui.rounded import RoundedButton, RoundedEntry, RoundedSelect
@@ -78,6 +81,8 @@ class Forge(tk.Tk):
         self.auto_open = tk.BooleanVar(value=stored['open_after_conversion'])
         self.auto_update_check = tk.BooleanVar(value=stored['auto_update_check'])
         self.auto_import_preset = tk.BooleanVar(value=stored.get('auto_import_preset', True))
+        self.unity_project = tk.StringVar(value=stored.get('unity_project', ''))
+        self.unity_auto_import = tk.BooleanVar(value=stored.get('unity_auto_import', False))
         self.install_after = tk.BooleanVar(value=stored['install_after_conversion'])
         self.output_preview = tk.StringVar(value='')
         self.name.trace_add('write', lambda *_: self._update_output_preview())
@@ -594,6 +599,19 @@ class Forge(tk.Tk):
                     fg=MUTED, font=('Segoe UI', 10), wraplength=840).pack(anchor='w', pady=(0, 19))
         self._button(body, 'Diagnosticar escala 1×1 de uma miniatura preparada',
                      self._diagnose_scale, padx=11, pady=8).pack(anchor='w', pady=(0, 10))
+        self._label(body, 'UNITY / TALEWEAVERLITE — IMPORTAÇÃO AUTOMÁTICA', fg=ACCENT).pack(anchor='w', pady=(13,5))
+        self._field(body, 'PROJETO TALEWEAVERLITE INSTALADO NO UNITY HUB',
+                    self.unity_project, self._select_unity_project)
+        ttk.Checkbutton(
+            body, text='Importar no Unity automaticamente após cada conversão',
+            variable=self.unity_auto_import, command=self._save_settings
+        ).pack(anchor='w',pady=(3,10))
+        self._button(body, 'Importar último modelo no Unity',
+                     self._import_to_unity, padx=11,pady=9).pack(anchor='w',pady=(1,9))
+        self._label(body, 'Cria malha, texturas, material e prefab de prévia dentro '
+                    'do projeto Unity. Depois, finalize a criatura no TaleWeaverLite '
+                    'com Default Scale = 1 e teste no TaleSpire.',
+                    fg=MUTED,wraplength=840).pack(anchor='w',pady=(0,13))
         self._button(body, 'Preparar TaleWeaverLite (Transform visual + Default Scale 1×1)',
                      self._prepare_twl_handoff, padx=11, pady=8).pack(anchor='w', pady=(0,10))
         self._label(body, 'Fluxo experimental via Unity: modelo com pivô nos pés, '
@@ -678,6 +696,69 @@ class Forge(tk.Tk):
         title = ('Escala 1×1: base limita a altura' if report.footprint_limited
                  else 'Escala 1×1: dimensões dentro da referência')
         messagebox.showwarning(title, report.summary()) if report.footprint_limited else messagebox.showinfo(title, report.summary())
+
+    def _select_unity_project(self):
+        previous=self.unity_project.get().strip()
+        detected=find_taleweaverlite_project()
+        initial=Path(previous).expanduser() if previous else (detected or Path.home())
+        selection=filedialog.askdirectory(
+            title='Selecione a raiz do projeto TaleWeaverLite do Unity Hub',
+            initialdir=str(initial) if initial.is_dir() else str(Path.home()))
+        if not selection:
+            return
+        try:
+            valid=validate_unity_project(selection)
+        except (ValueError,OSError) as exc:
+            messagebox.showwarning('Projeto Unity inválido',str(exc))
+            return
+        self.unity_project.set(str(valid))
+        self._save_settings()
+
+    def _import_to_unity(self):
+        """Import the last prepared model; user explicitly selects Unity project."""
+        if self.busy:
+            messagebox.showwarning('Conversão ativa','Aguarde terminar a conversão.')
+            return
+        project=self.unity_project.get().strip()
+        if not project:
+            detected=find_taleweaverlite_project()
+            if detected:
+                project=str(detected)
+                self.unity_project.set(project)
+                self._save_settings()
+            else:
+                self._select_unity_project()
+                project=self.unity_project.get().strip()
+        if not project:
+            return
+        root=getattr(self,'last_output',None)
+        if not root or not (Path(root)/'TaleWeaverCmd_Source').is_dir():
+            home=Path(self.target.get()).expanduser()
+            chosen=filedialog.askdirectory(
+                title='Selecione a pasta da miniatura convertida pelo Mini Forge',
+                initialdir=str(home) if home.is_dir() else str(Path.home()))
+            if not chosen:
+                return
+            root=Path(chosen)
+        try:
+            data=import_into_unity_project(root,project)
+        except (OSError,ValueError) as exc:
+            messagebox.showerror('Não foi possível importar no Unity',str(exc))
+            return
+        self._log('[UNITY] Modelo importado: '+data['import_path'])
+        self._save_settings()
+        details=('Modelo importado no projeto TaleWeaverLite!\n\n'
+                 'Pasta: '+data['import_path']+'\n\n'
+                 'Unity criará um prefab de prévia local, sem aplicar 8×. '
+                 'A configuração final Default Scale=1 e o .tsMod ainda '
+                 'precisam ser salvos pelo TaleWeaverLite.')
+        if messagebox.askyesno('Unity preparado',
+                               details+'\n\nAbrir o projeto no Unity agora?'):
+            try:
+                open_unity_project(project)
+            except (FileNotFoundError,OSError,ValueError) as exc:
+                messagebox.showinfo('Abrir Unity Hub',
+                                    str(exc)+'\nAbra manualmente o projeto TaleWeaverLite no Unity Hub.')
 
     def _prepare_twl_handoff(self):
         """Export materials for official TaleWeaverLite. Does NOT run Unity."""
@@ -998,7 +1079,9 @@ class Forge(tk.Tk):
                              tsmod_folder=self.tsmod_folder.get(),
                              auto_update_check=self.auto_update_check.get(),
                              reference_tsmod=self.tsmod_reference.get(),
-                             auto_import_preset=self.auto_import_preset.get())
+                             auto_import_preset=self.auto_import_preset.get(),
+                             unity_project=self.unity_project.get(),
+                             unity_auto_import=self.unity_auto_import.get())
         except OSError:
             pass
 
@@ -1046,6 +1129,13 @@ class Forge(tk.Tk):
             if not messagebox.askyesno('Pasta já existe',
                 'Já existem arquivos com esse nome. Deseja atualizar os arquivos gerados?\n\nOutros arquivos não serão apagados.'):
                 return
+        if self.unity_auto_import.get():
+            try:
+                validate_unity_project(self.unity_project.get())
+            except (ValueError,OSError) as error:
+                messagebox.showwarning('Configure TaleWeaverLite no Unity',
+                                       str(error)+'\n\nUse Mais opções → Exportação / Unity.')
+                return
         self._save_settings()
         self.last_output = None
         self.progress.set(0)
@@ -1058,7 +1148,9 @@ class Forge(tk.Tk):
         self._log(f'Pasta: {output}')
         cmd_setup = {'enabled': self.cmd_enabled.get(), 'exe': self.cmd_executable.get().strip().strip('"'), 'scale_factor': scale_factor, 'auto_height': auto_height,
                     'install_after': self.install_after.get(), 'content_folder': self.tsmod_folder.get().strip(),
-                     'reference_tsmod': self.tsmod_reference.get().strip()}
+                     'reference_tsmod': self.tsmod_reference.get().strip(),
+                     'unity_auto_import': self.unity_auto_import.get(),
+                     'unity_project': self.unity_project.get().strip()}
         self.worker = threading.Thread(target=self._convert_thread, args=(exe, cfg, cmd_setup), daemon=True)
         self.worker.start()
 
@@ -1148,6 +1240,14 @@ class Forge(tk.Tk):
                 except Exception as error:
                     cmd_error = str(error)
                     self.log_events.put(('log', 'ERRO no TaleWeaverCmd: ' + cmd_error))
+            if cmd_setup.get('unity_auto_import'):
+                try:
+                    unity_assets=import_into_unity_project(dest,cmd_setup['unity_project'])
+                    self.log_events.put(('log','[UNITY] Importado no projeto: '
+                                          +unity_assets['import_path']))
+                except (OSError,ValueError) as exc:
+                    self.log_events.put(('log',
+                        '[UNITY] Aviso: modelo convertido, mas importação Unity falhou: '+str(exc)))
             # Portable zip for moving prepared assets and final file if present.
 
             zip_path = dest / (cfg['name'] + '_ARQUIVOS_PREPARADOS.zip')
