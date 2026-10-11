@@ -357,7 +357,7 @@ class PaintingStudio(tk.Frame):
                            fg=TEXT,selectcolor=FIELD,activebackground=PANEL,
                            activeforeground=TEXT).pack(anchor='w',padx=9,pady=5)
         self._label(tab,'A luz muda apenas a visualização. Suas cores e a textura '
-                    'exportada são preservadas.',color=MUTED,wraplength=260,size=9).pack(
+                    'exportada são preservadas.',color=MUTED,wraplength=230,size=9).pack(
             anchor='w',padx=12,pady=12)
 
     def _apply_lighting(self):
@@ -403,7 +403,7 @@ class PaintingStudio(tk.Frame):
         opacity.bind('<KeyRelease-Right>',self._layer_opacity_change)
         self._label(tab,'As camadas são salvas como PNGs separados. '
                     'Mudar visibilidade não modifica o modelo original.',
-                    color=MUTED,wraplength=260).pack(anchor='w',padx=12,pady=13)
+                    color=MUTED,wraplength=230).pack(anchor='w',padx=12,pady=13)
         self._update_layers()
 
     def _update_layers(self):
@@ -523,13 +523,13 @@ class PaintingStudio(tk.Frame):
             slider(settings,title,variable,maximum=255,percent=True)
         menu.bind('<<ComboboxSelected>>',self._material_preset_selected)
         self._label(tab,'Selecione uma região no modelo e aplique o material.',
-                    color=MUTED,wraplength=260,size=9).pack(anchor='w',padx=12,pady=10)
+                    color=MUTED,wraplength=230,size=9).pack(anchor='w',padx=12,pady=10)
         self._button(tab,'Aplicar na região',self._apply_material,highlight=True).pack(fill='x',padx=11,pady=4)
         self._button(tab,'Limpar seleção',self._clear_region).pack(fill='x',padx=11,pady=4)
         availability=('Textura de material pronta' if self.session.maes_image is not None
                       else 'Converta o modelo para preparar os materiais')
         self._label(tab,availability,color=GREEN if self.session.maes_image is not None
-                    else MUTED,wraplength=260,size=9).pack(anchor='w',padx=12,pady=(14,5))
+                    else MUTED,wraplength=230,size=9).pack(anchor='w',padx=12,pady=(14,5))
 
     def _material_preset_selected(self,_event=None):
         for variable,value in zip(self._material_channels,PRESETS[self.material_name.get()]):
