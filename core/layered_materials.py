@@ -259,6 +259,61 @@ class LayeredPaintSession(PaintSession):
             brush.ellipse((cx-radius,cy-radius,cx+radius,cy+radius),fill=255)
         self._apply_mask(mask,(left,top),color,opacity,erase)
 
+    def stamp(self, x: int, y: int, color: str, diameter: int = 48,
+              opacity: float = 1.0, shape: str = 'Estrela',
+              custom: Image.Image | None = None):
+        """Stamp a color-tinted 2D mask onto the current Albedo layer.
+
+        Works with a picked 3D surface UV or directly on the atlas. Uses the
+        same undo/layer/region-selection rules as the existing brush.
+        """
+        if not 4 <= diameter <= 512:
+            raise ValueError('Carimbo deve ter tamanho entre 4 e 512.')
+        if not (0 <= x < self.image.width and 0 <= y < self.image.height):
+            return
+        if custom is not None:
+            if custom.width*custom.height > 1024*1024:
+                raise ValueError('Imagem de carimbo muito grande.')
+            mask=custom.convert('RGBA').getchannel('A').resize(
+                (diameter,diameter),Image.Resampling.LANCZOS)
+        else:
+            mask=Image.new('L',(diameter,diameter),0)
+            draw=ImageDraw.Draw(mask)
+            m=diameter/2
+            if shape=='Estrela':
+                points=[]
+                for i in range(10):
+                    angle=-math.pi/2+i*math.pi/5
+                    radius=.46*diameter if i%2==0 else .21*diameter
+                    points.append((m+math.cos(angle)*radius,
+                                   m+math.sin(angle)*radius))
+                draw.polygon(points,fill=255)
+            elif shape=='Selo':
+                draw.ellipse((2,2,diameter-3,diameter-3),outline=255,
+                             width=max(2,diameter//12))
+                draw.ellipse((diameter*.28,diameter*.28,
+                              diameter*.72,diameter*.72),fill=255)
+            elif shape=='Runa':
+                w=max(2,diameter//12)
+                draw.line((m,diameter*.08,m,diameter*.92),fill=255,width=w)
+                draw.line((diameter*.25,diameter*.22,m,diameter*.48,
+                           diameter*.75,diameter*.22),fill=255,width=w)
+                draw.line((diameter*.25,diameter*.75,m,diameter*.48,
+                           diameter*.75,diameter*.75),fill=255,width=w)
+            else:
+                raise ValueError('Forma de carimbo desconhecida.')
+        left=x-diameter//2
+        top=y-diameter//2
+        right=left+diameter
+        bottom=top+diameter
+        clipped=(max(0,left),max(0,top),
+                 min(self.image.width,right),min(self.image.height,bottom))
+        if clipped[0]>=clipped[2] or clipped[1]>=clipped[3]:
+            return
+        tile=mask.crop((clipped[0]-left,clipped[1]-top,
+                        clipped[2]-left,clipped[3]-top))
+        self._apply_mask(tile,(clipped[0],clipped[1]),color,opacity)
+
     def bucket(self, x: int, y: int, color: str, tolerance: int = 12):
         mask = self.selection if self.selection is not None else _flood_mask(
             self.image,(x,y),tolerance)
