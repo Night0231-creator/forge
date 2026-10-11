@@ -38,7 +38,7 @@ in vec2 uv;
 out vec4 fragColor;
 uniform vec2 resolution;
 void main() {
-    vec3 color=mix(vec3(.055,.055,.07),vec3(.09,.09,.114),1.0-uv.y);
+    vec3 color=mix(vec3(.051,.067,.094),vec3(.078,.106,.145),1.0-uv.y);
     float y=1.0-uv.y;
     if(y>.43) {
         float t=(y-.43)/.57;
@@ -47,7 +47,7 @@ void main() {
         float vertical=abs(fract(x+.5)-.5);
         float grid=max(1.0-smoothstep(.01,.035,horizontal),
                        1.0-smoothstep(.01,.035,vertical));
-        color=mix(color,vec3(.135,.135,.165),grid*.55);
+        color=mix(color,vec3(.114,.145,.192),grid*.55);
     }
     fragColor=vec4(color,1.0);
 }'''
@@ -238,7 +238,7 @@ if OpenGLFrame is not None:
 class RealtimeObjViewer(tk.Frame):
     """PaintingStudio-compatible viewport. Legacy preview is a lazy fallback."""
     def __init__(self,parent,on_status=None,**kw):
-        super().__init__(parent,bg='#101016',highlightthickness=0,**kw)
+        super().__init__(parent,bg='#0D1118',highlightthickness=0,**kw)
         self.on_status=on_status
         self.budget=FrameBudget()
         self._job=None

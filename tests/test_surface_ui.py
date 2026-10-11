@@ -5,6 +5,7 @@ import tkinter as tk
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 from PIL import Image
 
 from ui.painting_studio import PaintingStudio
@@ -75,6 +76,49 @@ class DesktopSurfaceTests(unittest.TestCase):
         self.assertTrue(jobs.issubset(set(self.root.tk.call('after','info'))))
         self.panel.destroy()
         self.assertFalse(jobs.intersection(self.root.tk.call('after','info')))
+        self.root.update()
+
+    def test_tool_shortcuts_respect_text_fields_and_unrelated_controls(self):
+        tool=self.panel.tool_buttons['pincel']
+        self.root.focus_force()
+        tool.focus_set()
+        self.root.update()
+        tool.event_generate('<KeyPress-g>')
+        self.root.update()
+        self.assertEqual(self.panel.mode.get(),'balde')
+        entry=self.panel.palette_search.entry
+        entry.focus_set()
+        self.root.update()
+        entry.event_generate('<KeyPress-b>')
+        self.root.update()
+        self.assertEqual(self.panel.palette_query.get(),'b')
+        self.assertEqual(self.panel.mode.get(),'balde')
+        with patch.object(self.panel,'_save') as save:
+            entry.event_generate('<Control-KeyPress-s>')
+            self.root.update()
+            save.assert_not_called()
+            tool.focus_set()
+            self.root.update()
+            tool.event_generate('<Control-KeyPress-s>')
+            self.root.update()
+            save.assert_called_once()
+        outside=tk.Button(self.root,text='Outside editor')
+        self.panel._shortcut(SimpleNamespace(widget=outside,keysym='e',state=0))
+        self.assertEqual(self.panel.mode.get(),'balde')
+        outside.destroy()
+
+    def test_closing_editor_removes_its_shortcuts_and_tooltip_timer(self):
+        sibling=self.root.bind('<KeyPress>',lambda _event:None,add='+')
+        binding=self.panel._key_binding[1]
+        self.assertIn(binding,self.root.bind('<KeyPress>'))
+        hint=self.panel.tool_buttons['pincel'].tooltip
+        hint.schedule()
+        job=hint.job
+        self.assertIn(job,self.root.tk.call('after','info'))
+        self.panel.destroy()
+        self.assertNotIn(binding,self.root.bind('<KeyPress>'))
+        self.assertIn(sibling,self.root.bind('<KeyPress>'))
+        self.assertNotIn(job,self.root.tk.call('after','info'))
         self.root.update()
 
 

@@ -69,7 +69,7 @@ class FullStudioTests(unittest.TestCase):
         self.assertIn('self.hero_bar.pack_forget()',sources['studio.py'])
         self.assertIn('self.status_bar.pack_forget()',sources['studio.py'])
         self.assertIn('draw_fast(mesh,albedo',sources['ui/gpu_pbr_renderer.py'])
-        self.assertIn("('Carimbo','carimbo')",sources['ui/painting_studio.py'])
+        self.assertIn("('Carimbo','carimbo','S')",sources['ui/painting_studio.py'])
 
 
 if __name__=='__main__':

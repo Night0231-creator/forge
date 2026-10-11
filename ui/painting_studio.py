@@ -24,6 +24,10 @@ from core.footprint_calibrator import find_project_obj
 from ui.texture_viewer import TexturedObjViewer
 from ui.realtime_viewer import RealtimeObjViewer
 
+from ui.theme import hover_button, apply_studio_style
+from ui.palette import SIDEBAR, SUBTLE, ACCENT_SOFT
+from ui.studio_controls import IconButton, SearchField, SwatchButton, Tooltip
+
 from ui.paint_widgets import (BG, PANEL, FIELD, TEXT, MUTED, ACCENT,
                               BORDER, COLOURS, ToolButton, slider)
 
@@ -52,7 +56,7 @@ class PaintingStudio(tk.Frame):
         self.stamp_name=tk.StringVar(value='Estrela')
         self.stamp_image=None
         self.show_uv = tk.BooleanVar(value=True)
-        self.status = tk.StringVar(value='Pinte a textura e salve um rascunho antes de aplicar.')
+        self.status = tk.StringVar(value='Pronto para pintar. Escolha uma cor e pinte na miniatura.')
         self.on_apply = on_apply
         self._last = None
         self._refresh_id = None
@@ -82,6 +86,11 @@ class PaintingStudio(tk.Frame):
                 setattr(self, name, None)
         if hasattr(self,'_mode_trace'):
             self.mode.trace_remove('write',self._mode_trace)
+        if hasattr(self,'_environment_trace'):
+            self._environment.trace_remove('write',self._environment_trace)
+        if hasattr(self,'_key_binding'):
+            window,binding=self._key_binding
+            window.unbind('<KeyPress>',binding)
         super().destroy()
 
     @staticmethod
@@ -91,106 +100,147 @@ class PaintingStudio(tk.Frame):
 
     @staticmethod
     def _button(parent, title, command, highlight=False):
-        return tk.Button(parent,text=title,command=command,
-                         bg=PURPLE if highlight else FIELD,fg='white',
-                         activebackground='#258AD8',activeforeground='white',
-                         relief='flat',padx=10,pady=5,cursor='hand2',bd=0,highlightthickness=0,
-                         font=('Segoe UI',9))
+        return hover_button(parent,title,command,primary=highlight,compact=True)
+
+    def _section(self,parent,title):
+        tk.Frame(parent,bg=BORDER,height=1).pack(fill='x',padx=14,pady=(17,10))
+        self._label(parent,title.upper(),color=SUBTLE,size=8,bold=True).pack(
+            anchor='w',padx=14,pady=(0,5))
+
+    def _check(self,parent,title,variable,command=None):
+        return tk.Checkbutton(parent,text=title,variable=variable,command=command,
+            bg=PANEL,fg=TEXT,selectcolor=FIELD,activebackground=PANEL,
+            activeforeground=TEXT,highlightthickness=0,bd=0,
+            font=('Segoe UI',9),cursor='hand2')
 
     def _make_ui(self):
-        """Compact paint dock and a large, uninterrupted miniature viewport."""
-        sty=ttk.Style(self)
+        """A tool rail, a generous viewport and a scrollable right inspector."""
+        sty=apply_studio_style(self)
+        sty.layout('PaintStudio.TNotebook.Tab',[])
         sty.configure('PaintStudio.TNotebook',background=PANEL,borderwidth=0,
-                      bordercolor=BORDER,lightcolor=PANEL,darkcolor=PANEL)
-        sty.configure('PaintStudio.TNotebook.Tab',background=PANEL,foreground=MUTED,
-                      font=('Segoe UI',9),padding=(10,7),bordercolor=BORDER,
-                      lightcolor=PANEL,darkcolor=PANEL,focuscolor=FIELD)
+                      bordercolor=PANEL,lightcolor=PANEL,darkcolor=PANEL)
         sty.configure('PaintStudio.Vertical.TScrollbar',background=FIELD,
                       troughcolor=PANEL,bordercolor=PANEL,lightcolor=PANEL,
-                      darkcolor=PANEL,arrowcolor=MUTED,arrowsize=10)
+                      darkcolor=PANEL,arrowcolor=MUTED,arrowsize=9)
         sty.map('PaintStudio.Vertical.TScrollbar',background=[('active',BORDER)])
-        sty.map('PaintStudio.TNotebook.Tab',
-                background=[('selected',FIELD)],foreground=[('selected',TEXT)])
         sty.configure('PaintStudio.TCombobox',fieldbackground=FIELD,background=FIELD,
                       foreground=TEXT,arrowcolor=MUTED,bordercolor=BORDER,
                       lightcolor=FIELD,darkcolor=FIELD,
-                      padding=4,font=('Segoe UI',9))
+                      padding=(8,6),font=('Segoe UI',9))
         sty.map('PaintStudio.TCombobox',fieldbackground=[('readonly',FIELD)],
                 foreground=[('readonly',TEXT)])
 
-        header=tk.Frame(self,bg=PANEL,height=39)
+        header=tk.Frame(self,bg=SIDEBAR,height=56)
         header.pack(fill='x')
         header.pack_propagate(False)
         if self.on_exit is not None:
-            self._button(header,'‹ Projetos',self.on_exit).pack(side='left',padx=(10,8),pady=6)
-        self._label(header,self.project.name.replace('_',' '),size=10,bold=True).pack(
-            side='left',padx=10)
+            self._button(header,'Projetos',self.on_exit).pack(side='left',padx=(12,14),pady=11)
+        titles=tk.Frame(header,bg=SIDEBAR)
+        titles.pack(side='left',fill='y',pady=7)
+        self._label(titles,'ESTÚDIO DE PINTURA',size=8,color=SUBTLE,bold=True).pack(anchor='w')
+        name=self.project.name.replace('_',' ')
+        self._label(titles,name if len(name)<=46 else name[:43]+'…',size=11,bold=True).pack(anchor='w')
         self._button(header,'Exportar texturas',self._apply,highlight=True).pack(
-            side='right',padx=(5,10),pady=6)
-        self._button(header,'Salvar',self._save).pack(side='right',padx=5,pady=6)
+            side='right',padx=(6,12),pady=11)
+        save=self._button(header,'Salvar projeto',self._save)
+        save.pack(side='right',padx=6,pady=11)
+        Tooltip(save,'Salvar rascunho e camadas  ·  Ctrl+S')
+        tk.Frame(self,bg=BORDER,height=1).pack(fill='x')
 
-        footer=tk.Frame(self,bg=BG,height=29)
+        footer=tk.Frame(self,bg=SIDEBAR,height=30)
         footer.pack(side='bottom',fill='x')
         footer.pack_propagate(False)
-        self._label(footer,'',color=MUTED,textvariable=self.status,size=9,anchor='w').pack(
+        self.performance_status=tk.StringVar(value='Preparando visualização…')
+        self._label(footer,'',textvariable=self.performance_status,color=SUBTLE,
+                    size=8,anchor='e').pack(side='right',padx=12)
+        self._label(footer,'',color=MUTED,textvariable=self.status,size=9,anchor='w',width=1).pack(
             side='left',fill='x',expand=True,padx=12)
         body=tk.Frame(self,bg=BG)
-        body.pack(fill='both',expand=True,padx=10,pady=(10,0))
+        body.pack(fill='both',expand=True,padx=12,pady=12)
         body.grid_rowconfigure(0,weight=1)
-        body.grid_columnconfigure(0,minsize=306,weight=0)
-        body.grid_columnconfigure(1,weight=1,minsize=360)
-        body.grid_columnconfigure(2,minsize=0,weight=0)
+        body.grid_columnconfigure(0,minsize=52)
+        body.grid_columnconfigure(1,weight=1,minsize=320)
+        body.grid_columnconfigure(2,minsize=300)
+        body.grid_columnconfigure(3,minsize=0)
 
-        self.tools_dock=tk.Frame(body,bg=PANEL,width=306,
+        self.tool_rail=tk.Frame(body,bg=SIDEBAR,width=52,
                                  highlightbackground=BORDER,highlightthickness=1)
-        self.tools_dock.grid(row=0,column=0,sticky='ns',padx=(0,10))
-        self.tools_dock.grid_propagate(False)
-        self._label(self.tools_dock,'Ferramentas de pintura',size=10,bold=True).pack(
-            anchor='w',padx=12,pady=(12,8))
-        modes=tk.Frame(self.tools_dock,bg=BG,highlightbackground=BORDER,
-                        highlightthickness=1)
-        modes.pack(fill='x',padx=10,pady=(0,5))
+        self.tool_rail.grid(row=0,column=0,sticky='ns',padx=(0,10))
+        self.tool_rail.pack_propagate(False)
+        self._label(self.tool_rail,'EDITAR',size=7,color=SUBTLE,bold=True).pack(pady=(15,10))
         self.tool_buttons={}
-        for title,key in (('Preenchimento','balde'),('Pincel','pincel'),
-                          ('Carimbo','carimbo'),('Selecionar região','regiao'),
-                          ('Conta-gotas','conta-gotas'),('Borracha','borracha')):
-            button=ToolButton(modes,key,title,lambda k=key:self.mode.set(k))
-            button.pack(side='left',expand=True,fill='x',padx=1,pady=2)
+        # Shortcut letters are scoped to this editor, never to text fields.
+        for title,key,shortcut in (('Pincel','pincel','B'),('Preenchimento','balde','G'),
+                          ('Carimbo','carimbo','S'),('Selecionar região','regiao','R'),
+                          ('Conta-gotas','conta-gotas','I'),('Borracha','borracha','E')):
+            button=ToolButton(self.tool_rail,key,title,lambda k=key:self.mode.set(k))
+            button.pack(padx=6,pady=3)
+            button.tooltip.text=f'{title}  ·  {shortcut}'
             self.tool_buttons[key]=button
-            button.bind('<Enter>',lambda _e,t=title:self.tool_caption.set(t),add='+')
-            button.bind('<Leave>',lambda _e:self.tool_caption.set(self.tool_buttons[self.mode.get()].title),add='+')
+        tk.Frame(self.tool_rail,bg=BORDER,height=1).pack(fill='x',padx=10,pady=13)
+        IconButton(self.tool_rail,'undo','Desfazer  ·  Ctrl+Z',self._undo).pack(padx=6,pady=3)
+        IconButton(self.tool_rail,'redo','Refazer  ·  Ctrl+Shift+Z',self._redo).pack(padx=6,pady=3)
+        IconButton(self.tool_rail,'frame','Enquadrar miniatura  ·  F',self._frame_model).pack(
+            side='bottom',padx=6,pady=10)
+
+        self.tools_dock=tk.Frame(body,bg=PANEL,width=300,
+                                 highlightbackground=BORDER,highlightthickness=1)
+        self.tools_dock.grid(row=0,column=2,sticky='ns',padx=(10,0))
+        self.tools_dock.pack_propagate(False)
         self.tool_caption=tk.StringVar(value='Pincel')
-        self._label(self.tools_dock,'',textvariable=self.tool_caption,size=9,
-                    color=MUTED).pack(anchor='w',padx=12,pady=(0,6))
-        tabs=ttk.Notebook(self.tools_dock,style='PaintStudio.TNotebook')
-        tabs.pack(fill='both',expand=True,padx=5,pady=(0,5))
+        inspector_title=tk.Frame(self.tools_dock,bg=PANEL)
+        inspector_title.pack(fill='x',padx=14,pady=(15,12))
+        self._label(inspector_title,'',textvariable=self.tool_caption,size=12,bold=True).pack(side='left')
+        self._label(inspector_title,'PROPRIEDADES',size=7,color=SUBTLE,bold=True).pack(side='right')
+        tab_bar=tk.Frame(self.tools_dock,bg=SIDEBAR)
+        tab_bar.pack(fill='x',padx=10,pady=(0,8))
+        self.tool_tabs=ttk.Notebook(self.tools_dock,style='PaintStudio.TNotebook')
+        self.tool_tabs.pack(fill='both',expand=True,padx=1,pady=(0,8))
         self._tool_scroll_pages=[]
-        paint=self._tool_tab(tabs,'Pintar')
-        materials=self._tool_tab(tabs,'Material')
-        layers=self._tool_tab(tabs,'Camadas')
-        scene=self._tool_tab(tabs,'Exibir')
+        paint=self._tool_tab(self.tool_tabs,'Pintar')
+        materials=self._tool_tab(self.tool_tabs,'Material')
+        layers=self._tool_tab(self.tool_tabs,'Camadas')
+        scene=self._tool_tab(self.tool_tabs,'Exibir')
+        self.inspector_buttons=[]
+        for index,title in enumerate(('Pintar','Material','Camadas','Exibir')):
+            tab_bar.grid_columnconfigure(index,weight=1,uniform='inspector')
+            button=self._button(tab_bar,title,lambda i=index:self.tool_tabs.select(i))
+            button.configure(width=64,height=32,font=('Segoe UI',8))
+            button.grid(row=0,column=index,sticky='ew',padx=1,pady=2)
+            self.inspector_buttons.append(button)
+        self.tool_tabs.bind('<<NotebookTabChanged>>',self._inspector_changed)
         self._paint_tab=paint
         self._build_palette(paint)
-        settings=tk.Frame(paint,bg=PANEL)
-        settings.pack(fill='x',padx=11,pady=(8,3))
+        self._brush_settings=tk.Frame(paint,bg=PANEL)
+        self._brush_settings.pack(fill='x')
+        self._section(self._brush_settings,'Pincel')
+        settings=tk.Frame(self._brush_settings,bg=PANEL)
+        settings.pack(fill='x',padx=14,pady=(0,3))
         slider(settings,'Tamanho',self.size,minimum=1)
-        slider(settings,'Opacidade',self.opacity,minimum=10)
-        slider(settings,'Dureza',self.hardness)
+        slider(settings,'Opacidade',self.opacity,minimum=10,percent=True)
+        slider(settings,'Dureza',self.hardness,percent=True)
         self._build_surface_options(paint)
         self._build_layers_tab(layers)
         self._build_materials_tab(materials)
 
-        viewport=tk.Frame(body,bg=BG)
-        viewport.grid(row=0,column=1,sticky='nsew')
-        camera=tk.Frame(viewport,bg=BG,height=29)
+        self.viewport_panel=tk.Frame(body,bg=SIDEBAR,highlightbackground=BORDER,highlightthickness=1)
+        self.viewport_panel.grid(row=0,column=1,sticky='nsew')
+        camera=tk.Frame(self.viewport_panel,bg=SIDEBAR,height=42)
         camera.pack(fill='x')
-        self.performance_status=tk.StringVar(value='GPU nativa · preparando')
-        self._label(camera,'',textvariable=self.performance_status,color=MUTED,size=8).pack(side='left',padx=8)
-        for title,view in (('Frente','frente'),('Lado','lado'),('Topo','topo')):
+        camera.pack_propagate(False)
+        self._label(camera,'VISUALIZAÇÃO 3D',color=SUBTLE,size=8,bold=True).pack(side='left',padx=12)
+        IconButton(camera,'frame','Enquadrar miniatura  ·  F',self._frame_model,size=32).pack(
+            side='right',padx=(4,8),pady=5)
+        for title,view in (('Topo','topo'),('Lado','lado'),('Frente','frente')):
             self._button(camera,title,lambda v=view:self.viewer.set_camera(v)).pack(
-                side='right',padx=2,pady=2)
-        self._button(camera,'Enquadrar',self._frame_model).pack(side='right',padx=2,pady=2)
-        self.viewer=RealtimeObjViewer(viewport,width=740,height=620,
+                side='right',padx=2,pady=5)
+        tk.Frame(self.viewport_panel,bg=BORDER,height=1).pack(fill='x')
+        bottom=tk.Frame(self.viewport_panel,bg=SIDEBAR,height=32)
+        bottom.pack(side='bottom',fill='x')
+        bottom.pack_propagate(False)
+        self._label(bottom,'Pintar: esquerdo   ·   Girar: direito   ·   Mover: meio   ·   Zoom: roda',
+                    color=SUBTLE,size=8,anchor='w',width=1).pack(fill='x',expand=True,padx=12)
+        self.viewer=RealtimeObjViewer(self.viewport_panel,width=740,height=620,
                                       on_status=self.performance_status.set)
         self.viewer.compare_reference=False
         self.viewer.pack(fill='both',expand=True)
@@ -213,45 +263,77 @@ class PaintingStudio(tk.Frame):
         self.viewer.bind('<ButtonRelease-1>',self._paint3d_end)
         self.viewer.bind('<ButtonPress-3>',self.viewer._start_drag)
         self.viewer.bind('<B3-Motion>',self.viewer._drag)
-        self.viewer.bind('<ButtonRelease-3>',
-                         lambda _e:setattr(self.viewer,'last_mouse',None))
+        self.viewer.bind('<ButtonRelease-3>',lambda _e:setattr(self.viewer,'last_mouse',None))
         self.viewer.bind('<ButtonPress-2>',self.viewer._start_drag)
         self.viewer.bind('<B2-Motion>',self.viewer._pan)
-        self.viewer.bind('<ButtonRelease-2>',
-                         lambda _e:setattr(self.viewer,'last_mouse',None))
+        self.viewer.bind('<ButtonRelease-2>',lambda _e:setattr(self.viewer,'last_mouse',None))
         self.viewer.bind('<Motion>',self._brush_motion)
         self.viewer.bind('<Leave>',lambda _e:self.viewer.clear_brush_cursor())
-        bottom=tk.Frame(viewport,bg=BG,height=25)
-        bottom.pack(fill='x')
-        self._label(bottom,'Esquerdo: pintar   ·   Direito: girar   ·   Meio: mover   ·   Roda: zoom',
-                    color=MUTED,size=8).pack(side='left',padx=8,pady=4)
-        actions=tk.Frame(bottom,bg=BG)
-        actions.pack(side='right')
-        self._button(actions,'↶',self._undo).pack(side='left',padx=2)
-        self._button(actions,'↷',self._redo).pack(side='left',padx=2)
 
-        self.uv_panel=tk.Frame(body,bg=PANEL,width=280,
+        self.uv_panel=tk.Frame(body,bg=PANEL,width=264,
                                highlightbackground=BORDER,highlightthickness=1)
-        self.uv_panel.grid(row=0,column=2,sticky='nsew',padx=(10,0))
-        self.uv_panel.grid_propagate(False)
-        self._label(self.uv_panel,'Mapa UV · cor',bold=True,size=10).pack(
-            anchor='w',padx=12,pady=(12,8))
-        self.canvas=tk.Canvas(self.uv_panel,width=262,height=400,bg=BG,
-                              highlightthickness=0)
-        self.canvas.pack(fill='both',expand=True,padx=8,pady=(0,8))
+        self.uv_panel.grid(row=0,column=3,sticky='ns',padx=(10,0))
+        self.uv_panel.pack_propagate(False)
+        self._label(self.uv_panel,'MAPA UV',bold=True,color=SUBTLE,size=8).pack(
+            anchor='w',padx=14,pady=(15,12))
+        self.canvas=tk.Canvas(self.uv_panel,width=240,height=400,bg=BG,highlightthickness=0)
+        self.canvas.pack(fill='both',expand=True,padx=10,pady=(0,8))
         self.canvas.bind('<ButtonPress-1>',self._mouse_down)
         self.canvas.bind('<B1-Motion>',self._mouse_drag)
         self.canvas.bind('<ButtonRelease-1>',lambda _e:setattr(self,'_last',None))
         self.canvas.bind('<Configure>',lambda _e:self._request_refresh())
-        tk.Checkbutton(self.uv_panel,text='Mostrar bordas UV',variable=self.show_uv,
-                       command=self._request_refresh,bg=PANEL,fg=TEXT,
-                       selectcolor=FIELD,activebackground=PANEL,highlightthickness=0,bd=0,
-                       activeforeground=TEXT).pack(anchor='w',padx=10,pady=(0,10))
+        self._check(self.uv_panel,'Mostrar bordas UV',self.show_uv,self._request_refresh).pack(
+            anchor='w',padx=10,pady=(0,10))
         self.uv_panel.grid_remove()
         self._mode_trace=self.mode.trace_add('write',self._update_tool_buttons)
         self._update_tool_buttons()
+        self._inspector_changed()
         for content,canvas in self._tool_scroll_pages:
             self._route_tool_wheel(content,canvas)
+        window=self.winfo_toplevel()
+        self._key_binding=(window,window.bind('<KeyPress>',self._shortcut,add='+'))
+
+    def _inspector_changed(self,_event=None):
+        selected=self.tool_tabs.index(self.tool_tabs.select())
+        for index,button in enumerate(self.inspector_buttons):
+            button.configure(bg=ACCENT_SOFT if index==selected else SIDEBAR,
+                             fg=TEXT if index==selected else MUTED)
+
+    def _shortcut(self,event):
+        if not self.winfo_viewable():
+            return
+        widget=event.widget
+        if widget.winfo_class() in ('Entry','TEntry','Text','Spinbox','TSpinbox','TCombobox'):
+            return
+        ancestor=widget
+        while ancestor is not None and ancestor!=self:
+            ancestor=getattr(ancestor,'master',None)
+        if ancestor is None:
+            return
+        key=event.keysym.lower()
+        if event.state & 4:
+            actions={'s':self._save,'z':self._redo if event.state & 1 else self._undo,
+                     'y':self._redo}
+            if key in actions:
+                actions[key]()
+                return 'break'
+            return
+        if event.state & (8 | 16 | 32 | 64 | 128):
+            return
+        tools={'b':'pincel','g':'balde','s':'carimbo','r':'regiao','i':'conta-gotas','e':'borracha'}
+        if key in tools:
+            self.mode.set(tools[key])
+            self.tool_tabs.select(0)
+            return 'break'
+        if key=='f':
+            self._frame_model()
+            return 'break'
+        if key=='bracketleft':
+            self.size.set(max(1,self.size.get()-2))
+            return 'break'
+        if key=='bracketright':
+            self.size.set(min(100,self.size.get()+2))
+            return 'break'
 
     def _brush_motion(self,event):
         enabled=self.paint3d_enabled.get() and self.mode.get() in ('pincel','borracha','carimbo')
@@ -265,7 +347,13 @@ class PaintingStudio(tk.Frame):
         current=self.mode.get()
         for key,button in self.tool_buttons.items():
             button.set_selected(current==key)
-        self.tool_caption.set(self.tool_buttons[current].title)
+        self.tool_caption.set('Região' if current=='regiao' else self.tool_buttons[current].title)
+        self.tool_tabs.select(0)
+        self.viewer.clear_brush_cursor()
+        if current in ('pincel','borracha','carimbo'):
+            self._brush_settings.pack(fill='x',before=self.surface_options)
+        else:
+            self._brush_settings.pack_forget()
         for frame,modes in ((self._region_options,('regiao','balde')),
                             (self._stamp_options,('carimbo',))):
             if current in modes:
@@ -274,41 +362,45 @@ class PaintingStudio(tk.Frame):
                 frame.pack_forget()
 
     def _build_palette(self,tab):
-        self.palette_query=tk.StringVar(value='')
-        self.palette_category='Cores'
-        search=tk.Entry(tab,textvariable=self.palette_query,bg=FIELD,fg=TEXT,
-                         insertbackground=TEXT,relief='flat',highlightthickness=1,
-                         highlightbackground=BORDER,highlightcolor=ACCENT,font=('Segoe UI',9))
-        search.pack(fill='x',padx=11,pady=(12,5),ipady=5)
-        search.bind('<KeyRelease>',lambda _e:self._refresh_palette())
-        self._label(tab,'Buscar cor pelo nome',color=MUTED,size=8).pack(anchor='w',padx=11)
-        categories=tk.Frame(tab,bg=PANEL)
-        categories.pack(fill='x',padx=10,pady=(7,6))
-        self.category_buttons={}
-        for name in ('Todas','Cores','Metais','Natural'):
-            button=tk.Button(categories,text=name,bg=FIELD,fg=MUTED,bd=0,highlightthickness=0,
-                             activebackground=ACCENT,activeforeground='white',
-                             font=('Segoe UI',8),padx=7,pady=3,cursor='hand2',
-                             command=lambda n=name:self._set_palette_category(n))
-            button.pack(side='left',padx=1)
-            self.category_buttons[name]=button
-        self.palette_grid=tk.Frame(tab,bg=BG,highlightbackground=BORDER,highlightthickness=1)
-        self.palette_grid.pack(fill='x',padx=10,pady=(0,8))
-        for column in range(3): self.palette_grid.grid_columnconfigure(column,weight=1,uniform='colour')
-        self._refresh_palette()
+        self._label(tab,'COR ATIVA',color=SUBTLE,size=8,bold=True).pack(
+            anchor='w',padx=14,pady=(8,8))
         chosen=tk.Frame(tab,bg=PANEL)
-        chosen.pack(fill='x',padx=11,pady=3)
-        self.colour_chip=tk.Button(chosen,bg=self.color.get(),width=2,relief='flat',
+        chosen.pack(fill='x',padx=14,pady=(0,6))
+        chip_frame=tk.Frame(chosen,bg=BORDER,width=44,height=36)
+        chip_frame.pack(side='left',padx=(0,10))
+        chip_frame.pack_propagate(False)
+        self.colour_chip=tk.Button(chip_frame,bg=self.color.get(),relief='flat',
                                    bd=0,highlightthickness=0,command=self._choose_color,cursor='hand2')
-        self.colour_chip.pack(side='left',padx=(0,8))
-        self._label(chosen,'Cor',color=MUTED,size=9).pack(side='left')
+        self.colour_chip.pack(fill='both',expand=True,padx=2,pady=2)
+        Tooltip(self.colour_chip,'Abrir seletor de cores')
         self.colour_text=tk.StringVar(value=self.color.get())
         field=tk.Entry(chosen,textvariable=self.colour_text,bg=FIELD,fg=TEXT,
-                        insertbackground=TEXT,relief='flat',width=10,highlightthickness=1,highlightbackground=BORDER,
-                        highlightcolor=ACCENT,font=('Consolas',9))
-        field.pack(side='right',ipady=3)
+                        insertbackground=TEXT,relief='flat',width=9,highlightthickness=1,
+                        highlightbackground=BORDER,highlightcolor=ACCENT,font=('Consolas',10))
+        field.pack(side='left',ipady=7)
         field.bind('<Return>',lambda _e:self._commit_colour())
-        self._button(chosen,'Escolher...',self._choose_color).pack(side='right',padx=5)
+        Tooltip(field,'Cor hexadecimal  ·  Enter para aplicar')
+        self._button(chosen,'Editar',self._choose_color).pack(side='right')
+        self._section(tab,'Biblioteca de cores')
+        self.palette_query=tk.StringVar(value='')
+        self.palette_category='Cores'
+        self.palette_search=SearchField(tab,self.palette_query,'Buscar uma cor…')
+        self.palette_search.pack(fill='x',padx=14,pady=(3,10))
+        self.palette_search.entry.bind('<KeyRelease>',lambda _e:self._refresh_palette())
+        categories=tk.Frame(tab,bg=PANEL)
+        categories.pack(fill='x',padx=13,pady=(0,9))
+        self.category_buttons={}
+        for index,name in enumerate(('Todas','Cores','Metais','Natural')):
+            categories.grid_columnconfigure(index,weight=1,uniform='category')
+            button=self._button(categories,name,lambda n=name:self._set_palette_category(n))
+            button.configure(width=60,height=28,font=('Segoe UI',8))
+            button.grid(row=0,column=index,sticky='ew',padx=1)
+            self.category_buttons[name]=button
+        self.palette_grid=tk.Frame(tab,bg=PANEL)
+        self.palette_grid.pack(fill='x',padx=12,pady=(0,0))
+        for column in range(6):
+            self.palette_grid.grid_columnconfigure(column,weight=1,uniform='colour')
+        self._refresh_palette()
 
     def _set_palette_category(self,name):
         self.palette_category=name
@@ -323,22 +415,18 @@ class PaintingStudio(tk.Frame):
         for child in self.palette_grid.winfo_children(): child.destroy()
         choices=[item for item in COLOURS if (self.palette_category=='Todas' or
                  item[2]==self.palette_category) and query in plain(item[0])]
+        self.palette_swatches=[]
         for i,(name,colour,_category) in enumerate(choices):
-            tile=tk.Frame(self.palette_grid,bg=FIELD,cursor='hand2')
-            tile.grid(row=i//3,column=i%3,sticky='ew',padx=2,pady=2)
-            chip=tk.Canvas(tile,width=12,height=13,bg=FIELD,highlightthickness=0)
-            chip.pack(side='left',padx=(4,3),pady=4)
-            chip.create_rectangle(0,0,12,13,fill=colour,outline=colour)
-            label=self._label(tile,name.replace(' claro',' cl.'),size=8,anchor='w')
-            label.pack(side='left',padx=(0,3))
-            for widget in (tile,chip,label):
-                widget.bind('<Button-1>',lambda _e,c=colour:self._set_color(c))
+            tile=SwatchButton(self.palette_grid,name,colour,lambda c=colour:self._set_color(c))
+            tile.grid(row=i//6,column=i%6,sticky='ew',padx=2,pady=2)
+            tile.set_selected(colour.casefold()==self.color.get().casefold())
+            self.palette_swatches.append(tile)
         if not choices:
             self._label(self.palette_grid,'Nenhuma cor encontrada',color=MUTED,size=9).grid(
-                row=0,column=0,columnspan=3,padx=8,pady=14)
+                row=0,column=0,columnspan=6,padx=8,pady=14)
         self._route_tool_wheel(self.palette_grid,self._tool_scroll_pages[0][1])
         for name,button in self.category_buttons.items():
-            button.configure(bg=ACCENT if name==self.palette_category else FIELD,
+            button.configure(bg=ACCENT_SOFT if name==self.palette_category else PANEL,
                              fg=TEXT if name==self.palette_category else MUTED)
 
     def _commit_colour(self):
@@ -372,13 +460,11 @@ class PaintingStudio(tk.Frame):
                                      ('Ambiente',self._ambient_level,200),
                                      ('Emissão',self._emission_level,300)):
             slider(settings,title,variable,maximum,command=lambda _v:self._apply_lighting())
-        self._environment.trace_add('write',lambda *_:self._apply_lighting())
+        self._environment_trace=self._environment.trace_add('write',lambda *_:self._apply_lighting())
         for text,variable,command in (('Usar prévia GPU',self._pbr_on,self._apply_lighting),
                                      ('Mostrar mapa UV',self.show_uv_editor,self._toggle_uv_panel),
                                      ('Pintar diretamente no 3D',self.paint3d_enabled,None)):
-            tk.Checkbutton(tab,text=text,variable=variable,command=command,bg=PANEL,
-                           fg=TEXT,selectcolor=FIELD,activebackground=PANEL,
-                           activeforeground=TEXT).pack(anchor='w',padx=9,pady=5)
+            self._check(tab,text,variable,command).pack(anchor='w',padx=10,pady=5)
         self._label(tab,'A luz muda apenas a visualização. Suas cores e a textura '
                     'exportada são preservadas.',color=MUTED,wraplength=230,size=9).pack(
             anchor='w',padx=12,pady=12)
@@ -413,10 +499,8 @@ class PaintingStudio(tk.Frame):
                              ('↓',lambda:self._layer_move(1))):
             self._button(options,name,command).pack(side='left',padx=2)
         self.layer_visible=tk.BooleanVar(value=True)
-        tk.Checkbutton(tab,text='Camada visível',variable=self.layer_visible,
-                       command=self._layer_visibility,bg=PANEL,fg=TEXT,
-                       selectcolor=FIELD,activebackground=PANEL,highlightthickness=0,bd=0,
-                       activeforeground=TEXT).pack(anchor='w',padx=12,pady=(12,5))
+        self._check(tab,'Camada visível',self.layer_visible,self._layer_visibility).pack(
+            anchor='w',padx=12,pady=(12,5))
         self.layer_opacity=tk.IntVar(value=100)
         settings=tk.Frame(tab,bg=PANEL)
         settings.pack(fill='x',padx=11)
@@ -515,9 +599,11 @@ class PaintingStudio(tk.Frame):
             self._route_tool_wheel(child,canvas)
 
     def _build_surface_options(self,tab):
-        tk.Checkbutton(tab,text='Pintar através do modelo',variable=self.paint_through,
-                       bg=PANEL,fg=TEXT,selectcolor=FIELD,activebackground=PANEL,highlightthickness=0,bd=0,
-                       activeforeground=TEXT).pack(anchor='w',padx=8,pady=(8,3))
+        self.surface_options=tk.Frame(tab,bg=PANEL)
+        self.surface_options.pack(fill='x')
+        tab=self.surface_options
+        self._check(tab,'Pintar através do modelo',self.paint_through).pack(
+            anchor='w',padx=10,pady=(10,3))
         self._region_options=tk.Frame(tab,bg=PANEL)
         self._label(self._region_options,'Seleção da região',color=MUTED,size=9).pack(anchor='w')
         ttk.Combobox(self._region_options,values=('Geometria','Cor similar'),
@@ -598,6 +684,8 @@ class PaintingStudio(tk.Frame):
         if hasattr(self,'colour_chip'):
             self.colour_chip.configure(bg=value)
             self.colour_text.set(value.upper())
+            for swatch in self.palette_swatches:
+                swatch.set_selected(swatch.colour.casefold()==value.casefold())
         self.status.set('Cor selecionada: '+value)
 
     def _choose_color(self):
@@ -738,6 +826,7 @@ class PaintingStudio(tk.Frame):
         return hit.pixel(*self.session.image.size)
 
     def _paint3d_start(self,event):
+        self.viewer.focus_set()
         self._brush_motion(event)
         self._last_3d=None
         if not self.paint3d_enabled.get():
