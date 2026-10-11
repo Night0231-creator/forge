@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V5.0.0.
+"""Astronyx Mini Forge Studio V5.1.0.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
@@ -26,6 +26,7 @@ from ui.studio_workspace import UnifiedStudio
 from core.updater import find_update, download_installer, run_installer, UpdateError, is_portable
 from core.update_policy import AUTO_UPDATE_INTERVAL_MS, STARTUP_DELAY_MS, should_show_update
 from ui.rounded import RoundedNavButton
+from ui.studio_controls import SearchField, draw_icon
 from ui.file_drop import register_file_drop
 from core.import_drop import parse_dropped_model
 
@@ -239,7 +240,10 @@ class Studio(UpdateInterface, legacy.Forge):
 
         brand = tk.Frame(sidebar, bg=SIDEBAR)
         brand.pack(fill='x', padx=20, pady=(21, 18))
-        tk.Label(brand, text='✦  ASTRONYX', fg=polish.ACCENT_HOVER, bg=SIDEBAR,
+        mark=tk.Canvas(brand,width=28,height=28,bg=SIDEBAR,highlightthickness=0)
+        mark.pack(anchor='w',pady=(0,10))
+        draw_icon(mark,'logo',14,14,25,polish.ACCENT)
+        tk.Label(brand, text='ASTRONYX', fg=FG, bg=SIDEBAR,
                  font=('Segoe UI', 17, 'bold')).pack(anchor='w')
         tk.Label(brand, text=f'MINI FORGE  /  V{APP_VERSION}', fg=polish.SUBTLE, bg=SIDEBAR,
                  font=('Segoe UI', 9, 'bold')).pack(anchor='w', pady=(6, 0))
@@ -257,7 +261,9 @@ class Studio(UpdateInterface, legacy.Forge):
             indicator=tk.Frame(row,bg=SIDEBAR,width=3)
             indicator.pack(side='left',fill='y')
             button=RoundedNavButton(
-                row,text=f'{icon}   {label}',
+                row,text=label,icon={'home':'pincel','quick':'import','library':'library',
+                                    'install':'import','convert':'cube','studio':'frame',
+                                    'scale':'layers','export':'folder','help':'library'}[key],
                 command=lambda k=key,t=target:self._navigate(k,t),
                 width=188)
             button.pack(side='left',fill='x',expand=True)
@@ -271,7 +277,7 @@ class Studio(UpdateInterface, legacy.Forge):
         footer=tk.Frame(sidebar,bg=SIDEBAR)
         footer.pack(side='bottom',fill='x',padx=17,pady=(0,21))
         tk.Frame(footer,bg=polish.BORDER,height=1).pack(fill='x',pady=(0,14))
-        ttk.Checkbutton(footer,text='Avisar sobre novas versões',
+        ttk.Checkbutton(footer,text='Verificar atualizações',
                         variable=self.auto_update_check,style='Sidebar.TCheckbutton',
                         command=self._on_auto_update_toggle).pack(fill='x',pady=(0,5))
         tk.Label(footer,text='Ao abrir e a cada 5 min enquanto aberto',
@@ -279,30 +285,30 @@ class Studio(UpdateInterface, legacy.Forge):
                  justify='center',anchor='center',wraplength=194).pack(fill='x',pady=(0,13))
         tk.Label(footer,text='●  CONVERSÃO LOCAL',bg=SIDEBAR,fg=GREEN,
                  font=('Segoe UI',9,'bold'),justify='center',anchor='center').pack(fill='x')
-        tk.Label(footer,text='Projetos salvos no seu computador',bg=SIDEBAR,
-                 fg=polish.SUBTLE,font=('Segoe UI',9),
+        tk.Label(footer,text='Seus projetos ficam no seu PC',bg=SIDEBAR,
+                 fg=polish.SUBTLE,font=('Segoe UI',8),wraplength=190,
                  justify='center',anchor='center').pack(fill='x',pady=(4,0))
 
         main = tk.Frame(body, bg=legacy.BG)
         self.main_panel=main
         main.pack(side='left', fill='both', expand=True)
-        hero = tk.Frame(main, bg=polish.PANEL, height=80)
+        hero = tk.Frame(main, bg=polish.PANEL, height=70)
         hero.pack(fill='x')
         self.hero_bar=hero
         hero.pack_propagate(False)
         left = tk.Frame(hero, bg=polish.PANEL)
-        left.pack(side='left', fill='both', expand=True, padx=(24, 4), pady=(17, 9))
+        left.pack(side='left', fill='both', expand=True, padx=(24, 4), pady=(13, 9))
         self.page_title = tk.StringVar(value='Visão geral')
         self.page_subtitle = tk.StringVar(value='Seu espaço de criação e conversão de miniaturas.')
         tk.Label(left, textvariable=self.page_title, bg=polish.PANEL, fg=FG,
-                 font=('Segoe UI', 19, 'bold'), anchor='w').pack(anchor='w')
+                 font=('Segoe UI', 14, 'bold'), anchor='w').pack(anchor='w')
         tk.Label(left, textvariable=self.page_subtitle, bg=polish.PANEL,
-                 fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', pady=(6, 0))
+                 fg=MUTED, font=('Segoe UI', 9)).pack(anchor='w', pady=(4, 0))
         actions = tk.Frame(hero, bg=polish.PANEL)
-        actions.pack(side='right', padx=21, pady=22)
-        polish.hover_button(actions,'↻ Detectar programas',self._detect_required,
+        actions.pack(side='right', padx=21, pady=18)
+        polish.hover_button(actions,'Detectar programas',self._detect_required,
                            compact=True).pack(side='right')
-        polish.hover_button(actions,'⬆ Atualizações',lambda:self._check_updates(True),
+        polish.hover_button(actions,'Atualizações',lambda:self._check_updates(True),
                            compact=True).pack(side='right',padx=(0,9))
 
         status = tk.Frame(main, bg=legacy.BG)
@@ -457,22 +463,23 @@ class Studio(UpdateInterface, legacy.Forge):
     def _draw_library(self):
         parent = self.tab_library
         header = tk.Frame(parent, bg=legacy.BG)
-        header.pack(fill='x', padx=6, pady=(8, 16))
-        tk.Label(header, text='Minhas miniaturas', bg=legacy.BG, fg=FG,
-                 font=('Segoe UI', 20, 'bold')).pack(side='left')
-        polish.hover_button(header, '↻ Atualizar', self.refresh_library,
+        header.pack(fill='x', padx=22, pady=(18, 12))
+        tk.Label(header, text='Meus projetos', bg=legacy.BG, fg=FG,
+                 font=('Segoe UI', 22, 'bold')).pack(side='left')
+        polish.hover_button(header, 'Importar modelo',lambda:self._navigate('quick','tab_dashboard'),
+                            primary=True,compact=True).pack(side='right',padx=(8,0))
+        polish.hover_button(header, 'Atualizar', self.refresh_library,
                             compact=True).pack(side='right')
-        tk.Label(parent, text='Projetos encontrados na pasta de saída. Nenhum modelo é alterado aqui.',
-                 bg=legacy.BG, fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', padx=7, pady=(0, 12))
+        tk.Label(parent, text='Abra uma miniatura para pintar ou instale a versão pronta para jogar.',
+                 bg=legacy.BG, fg=MUTED, font=('Segoe UI', 10)).pack(anchor='w', padx=22, pady=(0, 12))
         bar = tk.Frame(parent, bg=legacy.BG)
-        bar.pack(fill='x', padx=7)
+        bar.pack(fill='x', padx=22,pady=(2,8))
         self.library_summary = tk.StringVar(value='Carregando miniaturas...')
         self.library_search = tk.StringVar(value='')
         self.library_filter = tk.StringVar(value='Todos')
         filters = tk.Frame(parent, bg=legacy.BG)
-        filters.pack(fill='x', padx=7, pady=(6, 8))
-        tk.Label(filters, text='Pesquisar', bg=legacy.BG, fg=MUTED).pack(side='left', padx=(0, 9))
-        ttk.Entry(filters, textvariable=self.library_search, width=32,style='Astronyx.TEntry').pack(side='left', padx=(0, 14))
+        filters.pack(fill='x', padx=22, pady=(4, 12),before=bar)
+        SearchField(filters,self.library_search,'Buscar projeto…',width=320).pack(side='left',padx=(0,12))
         ttk.Combobox(filters, textvariable=self.library_filter,
                      values=('Todos', 'Prontos', 'Em preparação'),
                      state='readonly', width=18,style='Astronyx.TCombobox').pack(side='left')
@@ -481,10 +488,11 @@ class Studio(UpdateInterface, legacy.Forge):
         tk.Label(bar, textvariable=self.library_summary, bg=legacy.BG, fg=GREEN,
                  font=('Segoe UI', 10, 'bold')).pack(side='left')
         self.library_scroll = tk.Canvas(parent, bg=legacy.BG, highlightthickness=0)
-        scrollbar = tk.Scrollbar(parent, command=self.library_scroll.yview)
+        scrollbar = ttk.Scrollbar(parent, command=self.library_scroll.yview,
+                                  style='Astronyx.Vertical.TScrollbar')
         scrollbar.pack(side='right', fill='y')
         self.library_scroll.configure(yscrollcommand=scrollbar.set)
-        self.library_scroll.pack(fill='both', expand=True)
+        self.library_scroll.pack(fill='both', expand=True,padx=(15,10))
         self.library_frame = tk.Frame(self.library_scroll, bg=legacy.BG)
         self.library_scroll_id = self.library_scroll.create_window((0, 0),
                                                         window=self.library_frame, anchor='nw')
@@ -518,21 +526,28 @@ class Studio(UpdateInterface, legacy.Forge):
         filtered=hud22.filter_miniatures(entries,self.library_search.get(),
                                           self.library_filter.get())
         ready=sum(bool(item.tsmod) for item in entries)
-        self.library_summary.set(f'{len(filtered)} exibidos / {len(entries)} projetos    •    {ready} .tsMod prontos')
+        self.library_summary.set(f'{len(filtered)} de {len(entries)} projetos    ·    {ready} prontos para jogar')
         for index,item in enumerate(filtered):
             hud22.gallery_card(self,item,index)
         if not filtered:
             border=tk.Frame(self.library_frame,bg=polish.BORDER)
-            border.grid(row=0,column=0,sticky='ew',padx=8,pady=14)
+            border.grid(row=0,column=0,columnspan=self.gallery_columns,sticky='ew',padx=8,pady=14)
             empty=tk.Frame(border,bg=polish.PANEL)
             empty.pack(fill='x',padx=1,pady=1)
             title=('Nenhuma miniatura encontrada' if entries else 'Sua biblioteca começa aqui')
             detail=('Tente outro nome ou altere o filtro.'
-                    if entries else 'Clique em Nova conversão para preparar seu primeiro personagem.')
+                    if entries else 'Importe um modelo para preparar seu primeiro personagem.')
             tk.Label(empty,text='◈  '+title,bg=polish.PANEL,fg=polish.TEXT,
                      font=('Segoe UI',13,'bold')).pack(padx=20,pady=(22,7))
             tk.Label(empty,text=detail,bg=polish.PANEL,fg=polish.MUTED,
                      font=('Segoe UI',10)).pack(padx=20,pady=(0,22))
+            if not entries:
+                polish.hover_button(empty,'Importar modelo',lambda:self._navigate('quick','tab_dashboard'),
+                                    primary=True).pack(pady=(0,22))
+
+    def _open_painting_project(self,item):
+        if self.workspace.open_project(item):
+            self._navigate('home','tab_workspace')
 
     def refresh_library(self):
         if not hasattr(self,'library_frame'):
@@ -699,7 +714,7 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == '--version':
         if sys.stdout:
-            print('Astronyx Mini Forge Studio 5.0.0')
+            print('Astronyx Mini Forge Studio 5.1.0')
         raise SystemExit(0)
     if len(sys.argv) > 1 and sys.argv[1] == '--self-test':
         report = sys.argv[2] if len(sys.argv) > 2 else ''

@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from . import theme as t
+from .studio_controls import draw_icon
 
 try:
     from PIL import Image, ImageTk, ImageOps
@@ -50,73 +51,90 @@ def _card(parent,fill='x',**pack_opts):
 
 
 def dashboard(app):
-    """Essentials-first home: one import, one conversion button, clear progress."""
-    shell=tk.Frame(app.tab_dashboard,bg=BG)
-    shell.pack(fill='both',expand=True,padx=20,pady=13)
-
-    hero=_card(shell,pady=(0,13))
-    copy=tk.Frame(hero,bg=SURFACE)
-    copy.pack(fill='x',padx=22,pady=16)
-    _label(copy,'ASTRONYX MINI FORGE',fg=t.ACCENT_HOVER,size=9,bold=True,
-           anchor='center').pack(fill='x')
-    _label(copy,'Do Meshy direto para o TaleSpire',size=20,bold=True,
-           anchor='center').pack(fill='x',pady=(5,5))
-    _label(copy,'Escolha um arquivo .GLB ou .ZIP do Meshy. O Mini Forge prepara o personagem no seu PC.',
-           fg=MUTED,size=10,wraplength=680,justify='center',
-           anchor='center').pack(fill='x')
-
-    frame=tk.Frame(shell,bg=t.BORDER,padx=1,pady=1)
-    frame.pack(fill='x',pady=(0,13))
-    area=tk.Frame(frame,bg=SURFACE2,cursor='hand2')
-    area.pack(fill='x')
+    """A clear two-step import flow; all actions remain reachable at minimum size."""
+    outer=tk.Frame(app.tab_dashboard,bg=BG)
+    outer.pack(fill='both',expand=True)
+    scroll=ttk.Scrollbar(outer,orient='vertical',style='Astronyx.Vertical.TScrollbar')
+    scroll.pack(side='right',fill='y')
+    canvas=tk.Canvas(outer,bg=BG,highlightthickness=0,yscrollcommand=scroll.set)
+    canvas.pack(fill='both',expand=True)
+    scroll.configure(command=canvas.yview)
+    shell=tk.Frame(canvas,bg=BG)
+    item=canvas.create_window(0,0,anchor='nw',window=shell)
+    shell.bind('<Configure>',lambda _e:canvas.configure(scrollregion=canvas.bbox('all')))
+    canvas.bind('<Configure>',lambda e:canvas.itemconfigure(item,width=e.width))
+    content=tk.Frame(shell,bg=BG)
+    content.pack(fill='both',expand=True,padx=22,pady=18)
+    _label(content,'NOVO PROJETO',bg=BG,fg=t.SUBTLE,size=8,bold=True).pack(anchor='w')
+    _label(content,'Preparar nova miniatura',bg=BG,size=22,bold=True).pack(anchor='w',pady=(5,7))
+    _label(content,'Importe seu modelo Meshy e prepare a versão para pintar e jogar.',
+           bg=BG,fg=MUTED,size=10).pack(anchor='w',pady=(0,22))
+    flow=tk.Frame(content,bg=BG)
+    flow.pack(fill='x')
+    for column in (0,1): flow.grid_columnconfigure(column,weight=1,uniform='import')
+    area=tk.Frame(flow,bg=SURFACE,highlightbackground=t.BORDER,highlightthickness=1)
+    area.grid(row=0,column=0,sticky='nsew',padx=(0,8))
     app.hud_drop_area=area
-    badge=_label(area,'⬇',bg=SURFACE2,fg=t.ACCENT_HOVER,size=24,bold=True,anchor='center')
-    badge.pack(fill='x',pady=(17,2))
-    heading=_label(area,'01  •  SOLTE SEU MODELO AQUI',bg=SURFACE2,
-                   size=12,bold=True,anchor='center')
+    _label(area,'01  /  MODELO DE ORIGEM',fg=t.SUBTLE,size=8,bold=True).pack(
+        anchor='w',padx=18,pady=(18,14))
+    badge=tk.Canvas(area,width=46,height=46,bg=SURFACE,highlightthickness=0,cursor='hand2')
+    badge.pack(pady=(0,8))
+    draw_icon(badge,'import',23,23,32,t.ACCENT)
+    heading=_label(area,'Solte seu modelo aqui',size=13,bold=True,anchor='center',cursor='hand2')
     heading.pack(fill='x')
     app.hud_drop_filename=tk.StringVar(value='Nenhum arquivo selecionado')
-    filename=_label(area,'',bg=SURFACE2,fg=MUTED,size=10,
-                    textvariable=app.hud_drop_filename,anchor='center',
-                    wraplength=620,justify='center')
-    filename.pack(fill='x',padx=14,pady=(8,9))
-    buttons=tk.Frame(area,bg=SURFACE2)
-    buttons.pack(pady=(0,18))
-    choose=action(buttons,'Escolher GLB ou ZIP',app._pick_source,True)
-    choose.pack()
+    filename=_label(area,'',fg=MUTED,size=9,textvariable=app.hud_drop_filename,
+                    anchor='center',wraplength=280,justify='center',cursor='hand2')
+    filename.pack(fill='x',padx=18,pady=(9,13))
+    action(area,'Escolher GLB ou ZIP',app._pick_source,True).pack(pady=(0,8))
+    _label(area,'GLB ou ZIP exportado pelo Meshy',fg=t.SUBTLE,size=9).pack(pady=(0,18))
     app.hud_drop_widgets=(area,badge,heading,filename)
     for widget in app.hud_drop_widgets:
         widget.bind('<Button-1>',lambda _event:app._pick_source(),add='+')
-
-    step=_card(shell,pady=(0,13))
-    line=tk.Frame(step,bg=SURFACE)
-    line.pack(fill='x',padx=18,pady=(13,8))
-    _label(line,'02  •  GERAR MINIATURA',size=11,bold=True).pack(side='left')
-    _label(line,'Processo local pelo Blender + TaleWeaverCmd',fg=MUTED,size=9).pack(side='right')
+    step=tk.Frame(flow,bg=SURFACE,highlightbackground=t.BORDER,highlightthickness=1)
+    step.grid(row=0,column=1,sticky='nsew',padx=(8,0))
+    _label(step,'02  /  PREPARAÇÃO',fg=t.SUBTLE,size=8,bold=True).pack(
+        anchor='w',padx=18,pady=(18,14))
+    _label(step,'Pronto para o TaleSpire',size=13,bold=True).pack(anchor='w',padx=18)
+    _label(step,'Prepare a miniatura com textura e escala.\nA conversão acontece no seu PC.',
+           fg=MUTED,size=9,justify='left').pack(anchor='w',padx=18,pady=(9,17))
+    app.hud_generate_button=action(step,'Gerar miniatura .tsMod',app._start_quick,True)
+    app.hud_generate_button.pack(fill='x',padx=18,pady=(0,12))
     actions=tk.Frame(step,bg=SURFACE)
-    actions.pack(fill='x',padx=18,pady=(0,11))
-    app.hud_generate_button=action(actions,'GERAR .TSMOD',app._start_quick,True)
-    app.hud_generate_button.pack(side='left',padx=(0,9))
-    action(actions,'Abrir resultado',app._open_result).pack(side='left',padx=(0,9))
-    action(actions,'Calibrar 1×1',app._calibrate_1x1).pack(side='left',padx=(0,9))
-    action(actions,'Mais opções',lambda:app._navigate('convert','tab_quick')).pack(side='left')
+    actions.pack(fill='x',padx=18)
+    for index,(title,command) in enumerate((('Abrir resultado',app._open_result),
+            ('Calibrar 1×1',app._calibrate_1x1),
+            ('Mais opções',lambda:app._navigate('convert','tab_quick')))):
+        button=t.hover_button(actions,title,command,compact=True)
+        button.grid(row=index//2,column=index%2,sticky='ew',padx=(0,5),pady=(0,5))
+    actions.grid_columnconfigure(0,weight=1)
+    actions.grid_columnconfigure(1,weight=1)
     ttk.Progressbar(step,variable=app.progress,maximum=100,
-                    style='Astronyx.Horizontal.TProgressbar').pack(fill='x',padx=18,pady=(0,7))
-    _label(step,'',textvariable=app.message,fg=MUTED,size=9,
-           anchor='center',justify='center',wraplength=660).pack(fill='x',padx=18,pady=(0,14))
-
-    row=tk.Frame(shell,bg=BG)
-    row.pack(fill='x',pady=(0,7))
-    _label(row,'Seus últimos personagens',bg=BG,size=12,bold=True).pack(side='left')
-    t.hover_button(row,'Ver biblioteca →',lambda:app._navigate('library','tab_library'),
+                    style='Astronyx.Horizontal.TProgressbar').pack(fill='x',padx=18,pady=(10,8))
+    _label(step,'',textvariable=app.message,fg=MUTED,size=9,anchor='w',
+           justify='left',wraplength=300).pack(fill='x',padx=18,pady=(0,18))
+    row=tk.Frame(content,bg=BG)
+    row.pack(fill='x',pady=(24,8))
+    _label(row,'Projetos recentes',bg=BG,size=12,bold=True).pack(side='left')
+    t.hover_button(row,'Ver todos',lambda:app._navigate('library','tab_library'),
                    compact=True).pack(side='right')
-    app.hud_recent=tk.Frame(shell,bg=BG)
-    app.hud_recent.pack(fill='both',expand=True)
-
+    app.hud_recent=tk.Frame(content,bg=BG)
+    app.hud_recent.pack(fill='x')
     app.hud_stats=[]
-    app.hud_status_ready=_label(shell,'●  Processamento local: os modelos ficam no seu PC.',
-                                bg=BG,fg=GREEN,size=9,anchor='center')
-    app.hud_status_ready.pack(fill='x',pady=(5,0))
+    app.hud_status_ready=_label(content,'Processamento local  ·  Seus modelos ficam no seu PC',
+                                bg=BG,fg=t.SUBTLE,size=9,anchor='w')
+    app.hud_status_ready.pack(fill='x',pady=(18,0))
+    def wheel(event):
+        delta=-1 if getattr(event,'num',0)==4 else 1 if getattr(event,'num',0)==5 else -int(event.delta/120)
+        canvas.yview_scroll(delta,'units')
+        return 'break'
+    def route(parent):
+        for child in parent.winfo_children():
+            child.bind('<MouseWheel>',wheel)
+            child.bind('<Button-4>',wheel)
+            child.bind('<Button-5>',wheel)
+            route(child)
+    route(shell)
 
 def refresh_dashboard(app):
     if not hasattr(app,'hud_recent'):
@@ -138,7 +156,8 @@ def refresh_dashboard(app):
         inner=_card(app.hud_recent,pady=4)
         _label(inner,item.name.replace('_',' ')[:48],size=10,bold=True).pack(
             side='left',padx=16,pady=12)
-        t.hover_button(inner,'Abrir pasta ↗',lambda p=item.folder:app._open_library(p),
+        t.hover_button(inner,'Pintar' if app.workspace._valid_project(item) else 'Abrir pasta',
+                       lambda i=item:app._open_painting_project(i) if app.workspace._valid_project(i) else app._open_library(i.folder),
                        compact=True).pack(side='right',padx=10,pady=6)
         _label(inner,'● .tsMod pronto' if item.tsmod else '○ Em preparação',
                fg=GREEN if item.tsmod else t.YELLOW,size=9,bold=True).pack(side='right',padx=7)
@@ -169,7 +188,7 @@ def _thumbnail(card,item,app):
     area.pack(fill='x',padx=11,pady=(11,10))
     area.pack_propagate(False)
     image=None
-    if item.thumbnail and len(app.library_image_refs)<70:
+    if getattr(item,'thumbnail',None) and len(app.library_image_refs)<70:
         try:
             if item.thumbnail.stat().st_size <= 5_000_000:
                 if Image and ImageTk:
@@ -187,7 +206,9 @@ def _thumbnail(card,item,app):
         app.library_image_refs.append(image)
         tk.Label(area,image=image,bg=SURFACE2).pack(expand=True)
     else:
-        _label(area,'◈',bg=SURFACE2,fg=t.ACCENT_HOVER,size=35,bold=True).pack(expand=True)
+        placeholder=tk.Canvas(area,width=70,height=70,bg=SURFACE2,highlightthickness=0)
+        placeholder.pack(expand=True)
+        draw_icon(placeholder,'cube',35,35,44,t.SUBTLE)
 
 
 def gallery_card(app,item,index):
@@ -207,12 +228,17 @@ def gallery_card(app,item,index):
            fg=GREEN if item.tsmod else t.YELLOW,size=9,anchor='w').pack(
         fill='x',padx=12,pady=(5,10))
     buttons=tk.Frame(card,bg=SURFACE)
-    buttons.pack(fill='x',padx=10,pady=(0,11))
-    t.hover_button(buttons,'Pasta ↗',lambda p=item.folder:app._open_library(p),
-                   compact=True).pack(side='left')
+    buttons.pack(fill='x',padx=12,pady=(2,12))
+    buttons.grid_columnconfigure(0,weight=1)
+    buttons.grid_columnconfigure(1,weight=1)
+    if item.obj and app.workspace._valid_project(item):
+        t.hover_button(buttons,'Pintar',lambda i=item:app._open_painting_project(i),
+                       primary=True,compact=True).grid(row=0,column=0,columnspan=2,sticky='ew',pady=(0,7))
+    elif item.obj:
+        t.hover_button(buttons,'Prévia 3D',lambda p=item.obj:app._load_preview(p),
+                       compact=True).grid(row=0,column=0,columnspan=2,sticky='ew',pady=(0,7))
+    t.hover_button(buttons,'Pasta',lambda p=item.folder:app._open_library(p),
+                   compact=True).grid(row=1,column=0,sticky='ew',padx=(0,4))
     if item.tsmod:
         t.hover_button(buttons,'Instalar',lambda p=item.tsmod:app._install_library(p),
-                       primary=True,compact=True).pack(side='right')
-    elif item.obj:
-        t.hover_button(buttons,'Prévia',lambda p=item.obj:app._load_preview(p),
-                       compact=True).pack(side='right')
+                       compact=True).grid(row=1,column=1,sticky='ew',padx=(4,0))

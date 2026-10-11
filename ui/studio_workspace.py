@@ -12,6 +12,10 @@ from tkinter import messagebox, ttk
 from core.footprint_calibrator import find_project_obj
 from core.paint_studio import find_albedo
 from ui.painting_studio import PaintingStudio
+from ui.theme import hover_button
+from ui.palette import SUBTLE, SIDEBAR as NAV_BG, ACCENT_SOFT
+from ui.studio_controls import draw_icon
+from core.version import APP_VERSION
 
 from ui.paint_widgets import BG, PANEL, FIELD, TEXT, MUTED, ACCENT, BORDER
 
@@ -40,16 +44,16 @@ class UnifiedStudio(tk.Frame):
                         font=('Segoe UI',size,'bold' if bold else 'normal'),**kw)
 
     def _button(self,parent,title,command,accent=False):
-        return tk.Button(parent,text=title,command=command,
-                         bg=PURPLE if accent else RAISED,fg=FG,relief='flat',bd=0,highlightthickness=0,
-                         activebackground='#258AD8',activeforeground=FG,
-                         padx=10,pady=5,cursor='hand2',font=('Segoe UI',9))
+        return hover_button(parent,title,command,primary=accent,compact=True)
 
     def _make_shell(self):
-        toolbar=tk.Frame(self,bg=SURFACE,height=35)
+        toolbar=tk.Frame(self,bg=SURFACE,height=44)
         toolbar.pack(fill='x')
         toolbar.pack_propagate(False)
-        self._text(toolbar,'ASTRONYX',size=10,bold=True).pack(side='left',padx=(12,15))
+        mark=tk.Canvas(toolbar,width=26,height=28,bg=SURFACE,highlightthickness=0)
+        mark.pack(side='left',padx=(14,6))
+        draw_icon(mark,'logo',13,14,22,ACCENT)
+        self._text(toolbar,'ASTRONYX',size=10,bold=True).pack(side='left',padx=(0,15))
         file_menu=self._menu(toolbar,'Arquivo')
         file_menu.add_command(label='Importar modelo…',command=self._create_new)
         file_menu.add_command(label='Salvar pintura',command=lambda:self._editor_action('_save'))
@@ -67,21 +71,22 @@ class UnifiedStudio(tk.Frame):
         help_menu=self._menu(toolbar,'Ajuda')
         help_menu.add_command(label='Documentação',command=lambda:self.app._navigate('help','tab_guide'))
         help_menu.add_command(label='Verificar atualizações',command=lambda:self.app._check_updates(True))
-        self._button(toolbar,'+ Importar',self._create_new,accent=True).pack(
-            side='right',padx=(8,10),pady=4)
-        self.project_choice=ttk.Combobox(toolbar,state='readonly',width=25,
+        self._button(toolbar,'Importar modelo',self._create_new,accent=True).pack(
+            side='right',padx=(8,12),pady=6)
+        self.project_choice=ttk.Combobox(toolbar,state='readonly',width=27,
                                         style='Astronyx.TCombobox')
         self.project_choice.set('Selecionar miniatura')
-        self.project_choice.pack(side='right',padx=5,pady=3)
+        self.project_choice.pack(side='right',padx=5,pady=6)
         self.project_choice.bind('<<ComboboxSelected>>',self._choice_select)
+        tk.Frame(self,bg=BORDER,height=1).pack(fill='x')
         body=tk.Frame(self,bg=BG)
         body.pack(fill='both',expand=True)
-        self.project_rail=tk.Frame(body,bg=SIDEBAR,width=190,
+        self.project_rail=tk.Frame(body,bg=SIDEBAR,width=214,
                                    highlightbackground=BORDER,highlightthickness=1)
         self.project_rail.pack_propagate(False)
         self._text(self.project_rail,'Miniaturas',bold=True).pack(anchor='w',padx=12,pady=(12,8))
         self.project_list=tk.Listbox(self.project_rail,bg=BG,fg=FG,
-                                     selectbackground=ACCENT,selectforeground='white',
+                                     selectbackground=ACCENT_SOFT,selectforeground=TEXT,
                                      relief='flat',highlightthickness=0,activestyle='none',
                                      exportselection=False,font=('Segoe UI',10))
         self.project_list.pack(fill='both',expand=True,padx=8,pady=(0,8))
@@ -148,19 +153,64 @@ class UnifiedStudio(tk.Frame):
         self.home.pack(fill='both',expand=True)
         for child in self.home.winfo_children():
             child.destroy()
-        panel=tk.Frame(self.home,bg=SURFACE,highlightbackground=BORDER,
-                       highlightthickness=1)
-        panel.pack(fill='both',expand=True)
-        card=tk.Frame(panel,bg=SURFACE)
-        card.place(relx=.5,rely=.43,anchor='center')
-        self._text(card,'◈',size=32,color=PURPLE).pack()
-        self._text(card,'Seu estúdio de miniaturas',size=22,bold=True).pack(pady=(5,6))
-        self._text(card,'Importe um modelo Meshy, pinte diretamente no 3D\n'
-                   'e prepare a exportação para o TaleSpire.',
-                   size=11,color=MUTED,justify='center').pack(pady=(5,20))
-        self._button(card,'Importar personagem Meshy',self._create_new,accent=True).pack()
-        self._text(card,'GLB / ZIP  ·  pintura em camadas  ·  materiais  ·  TaleSpire',
-                   size=9,color=MUTED).pack(pady=(20,0))
+        content=tk.Frame(self.home,bg=BG)
+        content.place(relx=.5,rely=.47,anchor='center',relwidth=.78)
+        heading=tk.Frame(content,bg=BG)
+        heading.pack(fill='x',pady=(0,26))
+        self._text(heading,'MINI FORGE STUDIO',color=ACCENT,size=9,bold=True).pack(side='left')
+        self._text(heading,f'v{APP_VERSION}',color=SUBTLE,size=9).pack(side='right')
+        hero=tk.Frame(content,bg=BG)
+        hero.pack(fill='x')
+        hero.grid_columnconfigure(0,weight=1)
+        hero.grid_columnconfigure(1,weight=0)
+        copy=tk.Frame(hero,bg=BG)
+        copy.grid(row=0,column=0,sticky='nw')
+        self._text(copy,'Dê vida às suas\nminiaturas.',size=30,bold=True,
+                   justify='left',anchor='w').pack(anchor='w')
+        self._text(copy,'Pinte no 3D, experimente materiais e leve seu\n'
+                   'personagem do Meshy para o TaleSpire.',
+                   size=11,color=MUTED,justify='left').pack(anchor='w',pady=(14,23))
+        actions=tk.Frame(copy,bg=BG)
+        actions.pack(anchor='w')
+        self._button(actions,'Importar modelo',self._create_new,accent=True).pack(side='left',padx=(0,8))
+        self._button(actions,'Meus projetos',lambda:self.app._navigate('library','tab_library')).pack(side='left')
+        self._text(copy,'GLB / ZIP  ·  Seus projetos ficam no seu PC',size=9,color=SUBTLE).pack(
+            anchor='w',pady=(14,0))
+        # Lightweight static vector artwork; no animation or background renderer.
+        emblem=tk.Canvas(hero,width=240,height=260,bg=BG,highlightthickness=0)
+        emblem.grid(row=0,column=1,sticky='e',padx=(20,0))
+        for radius,colour in ((112,NAV_BG),(87,PANEL),(61,ACCENT_SOFT)):
+            emblem.create_oval(120-radius,130-radius,120+radius,130+radius,
+                               fill=colour,outline=BORDER,width=1)
+        draw_icon(emblem,'logo',120,130,78,ACCENT)
+        emblem.create_oval(204,89,212,97,fill=ACCENT,outline='')
+        emblem.create_oval(33,167,39,173,fill=GREEN,outline='')
+        tk.Frame(content,bg=BORDER,height=1).pack(fill='x',pady=(30,22))
+        steps=tk.Frame(content,bg=BG)
+        steps.pack(fill='x')
+        for column,(icon,title,detail) in enumerate((
+                ('import','01  Importe','Comece com seu modelo Meshy.'),
+                ('pincel','02  Pinte','Cores, camadas e materiais.'),
+                ('cube','03  Jogue','Exporte para o TaleSpire.'))):
+            steps.grid_columnconfigure(column,weight=1,uniform='step')
+            card=tk.Frame(steps,bg=BG)
+            card.grid(row=0,column=column,sticky='nsew',padx=(0,16))
+            mark=tk.Canvas(card,width=28,height=30,bg=BG,highlightthickness=0)
+            mark.pack(anchor='w',pady=(0,8))
+            draw_icon(mark,icon,14,15,23,ACCENT)
+            self._text(card,title,size=10,bold=True).pack(anchor='w')
+            self._text(card,detail,size=9,color=MUTED,wraplength=220,justify='left').pack(
+                anchor='w',pady=(5,0))
+
+    def open_project(self,item):
+        """Open a gallery item in this editor, preserving the current draft guard."""
+        if not self._valid_project(item):
+            messagebox.showinfo('Projeto ainda não preparado',
+                                'Converta o modelo antes de abrir a pintura.',parent=self)
+            return False
+        if self.current is not None and self.current.folder==item.folder and self.workspace_editor is not None:
+            return True
+        return self._select_project(item,first=self.workspace_editor is None)
 
     def _valid_project(self,entry):
         if entry is None or entry.obj is None:
@@ -222,7 +272,7 @@ class UnifiedStudio(tk.Frame):
                 'Deseja abrir outra miniatura? Salve o projeto atual antes '
                 'de trocar: edições não salvas serão perdidas.',parent=self):
                 self._select_row()
-                return
+                return False
         previous=self.current
         self.current=item
         self._select_row()
@@ -237,12 +287,14 @@ class UnifiedStudio(tk.Frame):
                                   on_exit=self._back_to_library)
             editor.pack(fill='both',expand=True)
             self.workspace_editor=editor
+            return True
         except Exception as exc:
             self.current=previous
             self._select_row()
             self._show_welcome()
             messagebox.showerror('Não foi possível abrir a pintura',
                                  str(exc),parent=self)
+            return False
 
     def _back_to_library(self):
         self.app._navigate('library','tab_library')

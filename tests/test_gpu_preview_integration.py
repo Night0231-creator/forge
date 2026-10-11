@@ -34,7 +34,7 @@ class PreviewIntegrationTests(unittest.TestCase):
 
     def test_version_and_windows_bundles(self):
         from core.version import APP_VERSION
-        self.assertEqual(APP_VERSION,'5.0.0')
+        self.assertEqual(APP_VERSION,'5.1.0')
         for name in ('build_windows.ps1','build_portable_windows.ps1'):
             content=(ROOT/'tools'/name).read_text(encoding='utf-8')
             self.assertIn('--collect-all moderngl',content)

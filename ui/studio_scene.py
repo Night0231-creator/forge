@@ -10,8 +10,8 @@ PREVIEW_LIMIT = 900
 @lru_cache(maxsize=3)
 def _background(width, height):
     rows = np.linspace(0, 1, height, dtype=np.float32)[:, None, None]
-    top = np.array([14, 14, 18], dtype=np.float32)
-    bottom = np.array([23, 23, 29], dtype=np.float32)
+    top = np.array([13, 17, 24], dtype=np.float32)
+    bottom = np.array([20, 27, 37], dtype=np.float32)
     pixels = np.broadcast_to(top + (bottom-top)*rows, (height, width, 3))
     image = Image.fromarray(pixels.astype(np.uint8))
     draw = ImageDraw.Draw(image)
@@ -19,10 +19,10 @@ def _background(width, height):
     for i in range(1, 19):
         y = horizon + (height-horizon) * (i/18)**2
         strength = int(26 + 14 * (i/18)**2)
-        draw.line((0, y, width, y), fill=(strength, strength, strength+6))
+        draw.line((0, y, width, y), fill=(strength, strength+5, strength+13))
     for i in range(-18, 19):
         x = width/2 + i * width/12
-        draw.line((width/2 + i*2, horizon, x, height), fill=(34, 34, 42))
+        draw.line((width/2 + i*2, horizon, x, height), fill=(29, 37, 49))
     return image
 
 
