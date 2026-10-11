@@ -179,10 +179,15 @@ class PaintingStudio(tk.Frame):
         self.viewer=TexturedObjViewer(viewport,width=640,height=580)
         self.viewer.compare_reference=False
         self.viewer.pack(fill='both',expand=True,padx=5,pady=5)
+        self._pbr_on=tk.BooleanVar(value=True)
+        self._light_level=tk.IntVar(value=100)
+        self._emission_level=tk.IntVar(value=100)
         try:
             self.viewer.open(find_project_obj(self.project))
         except (OSError,ValueError) as exc:
             self._label(viewport,str(exc),color=MUTED,wraplength=580).pack(pady=8)
+        if self.session.maes_image is not None:
+            self.viewer.set_materials(self.session.maes_image)
         self.viewer.bind('<ButtonPress-1>',self._paint3d_start)
         self.viewer.bind('<B1-Motion>',self._paint3d_drag)
         self.viewer.bind('<ButtonRelease-1>',self._paint3d_end)
@@ -190,6 +195,22 @@ class PaintingStudio(tk.Frame):
         self.viewer.bind('<B3-Motion>',self.viewer._drag)
         self.viewer.bind('<ButtonRelease-3>',
                          lambda _e:setattr(self.viewer,'last_mouse',None))
+        lighting=tk.Frame(viewport,bg='#1B2032')
+        lighting.pack(fill='x',padx=9)
+        tk.Checkbutton(lighting,text='GPU / PBR',variable=self._pbr_on,
+                       command=self._apply_lighting,bg='#1B2032',fg=TEXT,
+                       selectcolor=FIELD,activebackground='#1B2032',
+                       activeforeground=TEXT).pack(side='left',padx=(3,8))
+        self._label(lighting,'Luz',color=MUTED,size=9).pack(side='left')
+        tk.Scale(lighting,from_=0,to=300,resolution=10,orient='horizontal',
+                 variable=self._light_level,command=lambda _v:self._apply_lighting(),
+                 length=135,showvalue=False,bg='#1B2032',fg=TEXT,
+                 troughcolor=FIELD,highlightthickness=0).pack(side='left',padx=(4,12))
+        self._label(lighting,'Emissão',color=MUTED,size=9).pack(side='left')
+        tk.Scale(lighting,from_=0,to=300,resolution=10,orient='horizontal',
+                 variable=self._emission_level,command=lambda _v:self._apply_lighting(),
+                 length=125,showvalue=False,bg='#1B2032',fg=TEXT,
+                 troughcolor=FIELD,highlightthickness=0).pack(side='left',padx=4)
         vfoot=tk.Frame(viewport,bg='#1B2032')
         vfoot.pack(fill='x')
         self.paint3d_enabled=tk.BooleanVar(value=True)
@@ -220,6 +241,12 @@ class PaintingStudio(tk.Frame):
                        selectcolor=FIELD,activebackground=PANEL,
                        activeforeground=TEXT).pack(anchor='w',padx=10,pady=(0,12))
         self.uv_panel.grid_remove()
+
+    def _apply_lighting(self):
+        if hasattr(self,'viewer'):
+            self.viewer.set_lighting(light=self._light_level.get()/100,
+                                     emission=self._emission_level.get()/100,
+                                     gpu=self._pbr_on.get())
 
     def _toggle_uv_panel(self):
         if self.show_uv_editor.get():
@@ -332,13 +359,15 @@ class PaintingStudio(tk.Frame):
         self._label(tab,availability,color=GREEN if self.session.maes_image is not None
                     else MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(16,0))
         self._label(tab,'Canais MAES: Vermelho=Metal, Verde=AO, Azul=Emissão, Alfa=Suavidade. '
-                    'A prévia 3D mostra apenas as cores Albedo; os efeitos '
-                    'de superfície aparecem no TaleSpire após reexportar.',
+                    'Com GPU OpenGL 3.3 a prévia usa MAES para reflexos, '
+                    'metal, emissão e iluminação. O TaleSpire pode renderizar '
+                    'de modo diferente: confirme após reexportar.',
                     color=MUTED,wraplength=245).pack(anchor='w',padx=12,pady=(14,0))
 
     def _apply_material(self):
         try:
             self.session.apply_material(self.material_name.get())
+            self.viewer.set_materials(self.session.maes_image)
             self.status.set('Material '+self.material_name.get()+
                 ' aplicado à região. Salve e reexporte para conferir no TaleSpire.')
         except (OSError,ValueError) as exc:
@@ -523,7 +552,10 @@ class PaintingStudio(tk.Frame):
         image=self.session.image.convert('RGB')
         image.thumbnail((1024,1024),Image.Resampling.BILINEAR)
         self.viewer._albedo=np.asarray(image,dtype=np.uint8).copy()
-        self.viewer.render()
+        if self.session.maes_image is not None:
+            self.viewer.set_materials(self.session.maes_image)
+        else:
+            self.viewer.render()
 
     def _undo(self):
         if self.session.undo():
