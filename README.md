@@ -1,4 +1,17 @@
-# Astronyx Mini Forge Studio V5.2.0 — cor e material no mesmo pincel
+# Astronyx Mini Forge Studio V5.3.0 — sombras e destaques automáticos
+
+A aba **Efeitos** acrescenta sombras de volume, reforço dos sulcos e destaques nas bordas convexas. Ative **Sombras e destaques** ou escolha **Suave**, **Miniatura** ou **Contraste**. As intensidades são independentes e o efeito acompanha as cores aplicadas depois com pincel, balde e carimbo.
+
+- Os mapas são preparados uma vez em segundo plano, usando a geometria, as normais e a oclusão do projeto. Durante a pintura, somente as áreas alteradas são recompostas; não há passe extra de renderização contínua.
+- As camadas mantêm a pintura original. O efeito participa de desfazer/refazer, pode ser desligado para comparar, é salvo junto do rascunho e entra no Albedo exportado. A iluminação da aba **Exibir** continua sendo apenas visual.
+- UVs compartilhados reutilizam o mesmo efeito. Arestas geométricas atravessam costuras UV; limites de ilhas e diagonais coplanares não recebem destaques artificiais. A qualidade depende dos UVs, da geometria e dos mapas importados.
+- Mapas até 1024 pixels e lotes limitados mantêm o trabalho de preparação e o uso de memória controlados. A malha original permanece intacta. Mudanças no OBJ ou no normal map invalidam o efeito salvo, preservando as camadas.
+- O conta-gotas e a seleção por cor usam a pintura de base, evitando acumular o sombreamento ao reutilizar uma cor.
+- Corrigida a redução de MAES 4K na exportação: metal, oclusão e emissão são preservados mesmo com suavidade zero, pois os quatro canais são redimensionados como dados.
+
+O sombreamento é uma estimativa artística baseada em orientação, dobras, normais e AO disponível. Sombras projetadas por ray tracing, halo de emissão e a preparação completa de STL da referência [Basecoat](https://store.steampowered.com/app/4468700/Basecoat_Mini_Painting_Studio/) ainda são diferenças entre os programas.
+
+## Cor e material no mesmo pincel
 
 A biblioteca visual oferece **aço, ouro, bronze, ferro, couro, tecido, pele, pedra, cristal, chama, gelo e esmalte**. Escolha um material na aba **Material**, ajuste a cor e pinte no 3D: pincel, balde e carimbo aplicam cor, metal, emissão e suavidade com a mesma cobertura. A opção **Pintar acabamento junto da cor** permite controlar esse comportamento. A oclusão existente no modelo é preservada durante os traços; a aplicação explícita na seleção continua oferecendo os quatro canais MAES.
 
@@ -8,7 +21,7 @@ A biblioteca visual oferece **aço, ouro, bronze, ferro, couro, tecido, pele, pe
 - Propriedades e biblioteca ficam à esquerda, com a miniatura em uma área ampla à direita.
 - Atualizações de material usam pequenas áreas da textura, assim como as atualizações de cor. O canal A da MAES guarda suavidade e é redimensionado como dado, sem transparência premultiplicada.
 
-O detalhe da superfície depende da geometria e do normal map importados. Esta versão aproxima o fluxo de pintura da referência [Basecoat](https://store.steampowered.com/app/4468700/Basecoat_Mini_Painting_Studio/). A geração automática de sombras/destaques, o halo de emissão e a preparação completa de STL da referência ainda são diferenças entre os programas.
+O detalhe da superfície depende da geometria e do normal map importados.
 
 ## Edição em segundo plano
 
@@ -24,9 +37,9 @@ O 3D nativo usa OpenGL 3.3 e redesenha sob demanda, ficando ocioso quando nada m
 
 Validação de pixels e comandos: `python -m unittest discover -s tests -v`. Janela real: `python tools/validate_native_viewport.py --report dist/validation-native-window.json`.
 
-Teste de latência com 145.800 faces e textura 4096 × 4096: `python tools/validate_editing_latency.py --report dist/validation-editing.json`. Verifica a resposta da interface enquanto pinta cor e material, preserva a oclusão, seleciona por geometria/cor, desfaz, refaz e salva os dois mapas. Executa tanto o viewport nativo quanto a prévia compatível quando há OpenGL 3.3; mede latência da interface, não promete um FPS para todo computador. Os arquivos originais são conferidos no fim. Para exigir o viewport nativo, acrescente `--require-native`.
+Teste de latência com 145.800 faces e textura 4096 × 4096: `python tools/validate_editing_latency.py --report dist/validation-editing.json`. Verifica a resposta da interface durante a preparação do sombreamento e a pintura de cor/material, preserva a oclusão, seleciona por geometria/cor, desfaz, refaz e salva os mapas. Executa tanto o viewport nativo quanto a prévia compatível quando há OpenGL 3.3; mede latência da interface, não promete um FPS para todo computador. Os arquivos originais são conferidos no fim. Para exigir o viewport nativo, acrescente `--require-native`.
 
-Capturas reproduzíveis: `python tools/capture_studio_ui.py --example --output dist/studio.png`. Use `--inspector material`, `--page welcome`, `--page import`, `--page library` ou `--width 1120 --height 720`.
+Capturas reproduzíveis: `python tools/capture_studio_ui.py --example --output dist/studio.png`. Use `--inspector effects --automatic-shading`, `--inspector material`, `--page welcome`, `--page import`, `--page library` ou `--width 1120 --height 720`.
 
 A distribuição Windows inclui as dependências de renderização. Blender e TaleWeaverCmd continuam responsáveis pelas conversões/exportações existentes.
 
@@ -40,7 +53,7 @@ A distribuição Windows inclui as dependências de renderização. Blender e Ta
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.2.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.3.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -49,7 +62,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v5.2.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v5.3.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 

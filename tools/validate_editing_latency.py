@@ -98,11 +98,16 @@ def validate(require_native=False):
                     fallback._poll_job=fallback.after(33,fallback._poll)
                 heartbeat()
                 started=time.perf_counter()
+                def invoke(method,event):
+                    begin=time.perf_counter();method(event);callbacks.append((time.perf_counter()-begin)*1000)
+                stage[0]='shading';panel.auto_shading.set(True)
+                invoke(panel._configure_shading,None);settle(panel)
+                assert panel.session.automatic_shading.enabled
+                shade_maps=panel.session.automatic_shading.maps
+                stage[0]='paint'
                 x=panel.viewer.winfo_width()*.5;y=panel.viewer.winfo_height()*.55
                 before=panel.session.image.getpixel((2048,2048))
                 before_material=panel.session.maes_image.getpixel((2048,2048))
-                def invoke(method,event):
-                    begin=time.perf_counter();method(event);callbacks.append((time.perf_counter()-begin)*1000)
                 invoke(panel._paint3d_start,SimpleNamespace(x=x,y=y))
                 delivered=[False]
                 def drag(index=1):
@@ -113,7 +118,9 @@ def validate(require_native=False):
                 root.after(8,drag)
                 until(lambda:delivered[0]);settle(panel)
                 painted=panel.session.image.tobytes()
-                assert panel.session.image.getpixel((2048,2048))[:3]==ImageColor.getrgb(panel.color.get())
+                assert panel.session.pick(2048,2048)==panel.color.get()
+                assert panel.session.image.getpixel((2048,2048))[:3]!=ImageColor.getrgb(panel.color.get())
+                assert panel.session.automatic_shading.maps is shade_maps
                 painted_material=panel.session.maes_image.getpixel((2048,2048))
                 assert painted_material==(finish[0],255,finish[1],finish[2])
                 clock[0]=time.perf_counter()  # exclude this validator's full-4K byte comparisons
@@ -142,6 +149,7 @@ def validate(require_native=False):
                     'heartbeat_max_ms':round(max(intervals[1:]),2),
                     'seconds':round(time.perf_counter()-started,2),
                     'paint_undo_redo_save_selection':True,'material_brush_ao_undo_save':True,
+                    'automatic_shading_prepare_paint_undo_save':True,
                     'slow_heartbeat':list(peaks),
                     'main_callbacks_ms':{name:round(value,2) for name,value in observed.items()}}
                 report['phases'].append(phase)

@@ -84,6 +84,43 @@ class DesktopSurfaceTests(unittest.TestCase):
         self.assertEqual(self.panel.session.maes_image.getpixel((70,200)),(0,255,0,30))
         self.assertGreater(self.panel.viewer.winfo_width(),400)
 
+    def test_automatic_effect_is_queued_with_captured_settings_and_survives_save_undo(self):
+        gate=threading.Event();self.addCleanup(gate.set)
+        self.panel._queue_edit(lambda:gate.wait(5))
+        self.panel._shading_preset((60,45))
+        self.assertIsNone(self.panel.session.automatic_shading.maps)
+        self.panel.shadow_amount.set(10);self.panel.highlight_amount.set(5)
+        gate.set();self.wait_edits()
+        shade=self.panel.session.automatic_shading
+        self.assertTrue(shade.enabled)
+        self.assertEqual((shade.shadows,shade.highlights),(60,45))
+        self.panel.mode.set('pincel');self.panel.color.set('#CC2200')
+        event=self.event();self.panel._paint3d_start(event);self.panel._paint3d_end(event)
+        self.wait_edits();painted=self.panel.session.image.tobytes()
+        self.assertIs(self.panel.session.automatic_shading.maps,shade.maps)
+        self.panel._undo();self.wait_edits()
+        self.assertNotEqual(self.panel.session.image.tobytes(),painted)
+        self.panel._redo();self.panel._save();self.wait_edits()
+        with Image.open(self.panel.saved) as saved:
+            self.assertEqual(saved.convert('RGBA').tobytes(),painted)
+        self.panel.auto_shading.set(False);self.panel._configure_shading();self.wait_edits()
+        self.assertFalse(self.panel.session.automatic_shading.enabled)
+        self.panel._undo();self.wait_edits()
+        self.assertTrue(self.panel.auto_shading.get())
+        self.assertEqual(self.panel.session.image.tobytes(),painted)
+
+    def test_failed_shading_preparation_resets_controls_without_discarding_paint(self):
+        from unittest.mock import patch
+        before=self.panel.session.image.tobytes()
+        with patch('ui.painting_studio.build_shading_maps',side_effect=ValueError('UV inválido')), \
+             patch('ui.painting_studio.messagebox.showerror') as error:
+            self.panel._shading_preset((60,45));self.wait_edits()
+            error.assert_called_once()
+        self.assertFalse(self.panel.auto_shading.get())
+        self.assertIn('UV inválido',self.panel.shading_status.get())
+        self.assertEqual(self.panel.session.image.tobytes(),before)
+        self.assertEqual(len(self.panel.session.history),0)
+
     def test_material_choice_is_captured_before_queued_brush_and_undo_save(self):
         from core.material_palette import MATERIALS
         gold=next(c for c in MATERIALS if c.name=='Ouro')

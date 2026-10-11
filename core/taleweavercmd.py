@@ -56,7 +56,11 @@ def _copy_compatible_texture(source: Path, destination: Path) -> None:
                 # Keep the source untouched; the converter only reads the staged PNG.
                 mode = picture.mode if picture.mode in ('RGB', 'RGBA') else 'RGBA'
                 converted = picture.convert(mode)
-                converted.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
+                if destination.name.lower()=='metallic_ao_emis_smoothness.png':
+                    from .texture_data import fit_maes
+                    converted=fit_maes(converted)
+                else:
+                    converted.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
                 converted.save(destination, format='PNG')
     except (OSError, UnidentifiedImageError) as exc:
         raise ValueError('Textura PNG invalida para TaleWeaverCmd: ' + source.name) from exc

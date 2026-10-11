@@ -11,6 +11,7 @@ import tkinter as tk
 from pathlib import Path
 import numpy as np
 from PIL import Image
+from core.texture_data import fit_maes
 
 from core.preview import ObjViewer
 from .studio_scene import PREVIEW_LIMIT, studio_background
@@ -103,18 +104,17 @@ class TexturedObjViewer(ObjViewer):
             if raw.width*raw.height > 4096*4096:
                 raise PreviewError('Textura de material excede 4096x4096.')
             if components==4:
-                data=raw.convert('RGBA')
+                data=fit_maes(raw,1024)
             else:
                 data=raw.convert('RGB')
-            data.thumbnail((1024,1024),Image.Resampling.LANCZOS)
+                data.thumbnail((1024,1024),Image.Resampling.LANCZOS)
             return np.asarray(data,dtype=np.uint8).copy()
 
     def set_materials(self,maes=None,normal=None):
         """Refresh on-GPU materials without altering exported texture files."""
         if maes is not None:
             if isinstance(maes,Image.Image):
-                copy=maes.convert('RGBA')
-                copy.thumbnail((1024,1024),Image.Resampling.LANCZOS)
+                copy=fit_maes(maes,1024)
                 self._maes=np.asarray(copy,dtype=np.uint8).copy()
             else:
                 self._maes=np.asarray(maes,dtype=np.uint8).copy()
