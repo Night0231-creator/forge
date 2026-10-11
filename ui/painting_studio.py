@@ -22,6 +22,7 @@ from core.paint_studio import find_albedo
 from core.layered_materials import LayeredPaintSession, PRESETS, apply_materials_to_export
 from core.footprint_calibrator import find_project_obj
 from ui.texture_viewer import TexturedObjViewer
+from ui.realtime_viewer import RealtimeObjViewer
 
 from ui.paint_widgets import (BG, PANEL, FIELD, TEXT, MUTED, ACCENT,
                               BORDER, COLOURS, ToolButton, slider)
@@ -65,6 +66,7 @@ class PaintingStudio(tk.Frame):
         self._preview_job = None
         self._make_ui()
         self._render_texture()
+        self._schedule_preview()
         if self.session.restored_layers:
             self.status.set('Camadas da pintura anterior restauradas. A textura MAES é exibida somente após exportar no jogo.')
 
@@ -182,12 +184,14 @@ class PaintingStudio(tk.Frame):
         viewport.grid(row=0,column=1,sticky='nsew')
         camera=tk.Frame(viewport,bg=BG,height=29)
         camera.pack(fill='x')
-        self._label(camera,'PINTURA 3D',color=MUTED,size=8,bold=True).pack(side='left',padx=8)
+        self.performance_status=tk.StringVar(value='GPU nativa · preparando')
+        self._label(camera,'',textvariable=self.performance_status,color=MUTED,size=8).pack(side='left',padx=8)
         for title,view in (('Frente','frente'),('Lado','lado'),('Topo','topo')):
             self._button(camera,title,lambda v=view:self.viewer.set_camera(v)).pack(
                 side='right',padx=2,pady=2)
         self._button(camera,'Enquadrar',self._frame_model).pack(side='right',padx=2,pady=2)
-        self.viewer=TexturedObjViewer(viewport,width=740,height=620)
+        self.viewer=RealtimeObjViewer(viewport,width=740,height=620,
+                                      on_status=self.performance_status.set)
         self.viewer.compare_reference=False
         self.viewer.pack(fill='both',expand=True)
         self._pbr_on=tk.BooleanVar(value=True)
@@ -215,6 +219,8 @@ class PaintingStudio(tk.Frame):
         self.viewer.bind('<B2-Motion>',self.viewer._pan)
         self.viewer.bind('<ButtonRelease-2>',
                          lambda _e:setattr(self.viewer,'last_mouse',None))
+        self.viewer.bind('<Motion>',self._brush_motion)
+        self.viewer.bind('<Leave>',lambda _e:self.viewer.clear_brush_cursor())
         bottom=tk.Frame(viewport,bg=BG,height=25)
         bottom.pack(fill='x')
         self._label(bottom,'Esquerdo: pintar   ·   Direito: girar   ·   Meio: mover   ·   Roda: zoom',
@@ -246,6 +252,11 @@ class PaintingStudio(tk.Frame):
         self._update_tool_buttons()
         for content,canvas in self._tool_scroll_pages:
             self._route_tool_wheel(content,canvas)
+
+    def _brush_motion(self,event):
+        enabled=self.paint3d_enabled.get() and self.mode.get() in ('pincel','borracha','carimbo')
+        diameter=max(4,self.size.get()*2) if self.mode.get()=='carimbo' else self.size.get()
+        self.viewer.set_brush_cursor(event.x,event.y,diameter if enabled else 0)
 
     def _frame_model(self):
         self.viewer.reset()
@@ -339,6 +350,18 @@ class PaintingStudio(tk.Frame):
             self.status.set('Digite uma cor como #366AC5 ou use Escolher.')
 
     def _build_scene_tab(self,tab):
+        self.quality_profile=tk.StringVar(value='Auto')
+        self.target_fps=tk.StringVar(value='30')
+        self._label(tab,'Desempenho',bold=True,size=10).pack(anchor='w',padx=12,pady=(12,5))
+        for variable,values in ((self.quality_profile,('Auto','Leve','Alta')),
+                                (self.target_fps,('30','60'))):
+            combo=ttk.Combobox(tab,textvariable=variable,values=values,
+                               state='readonly',style='PaintStudio.TCombobox')
+            combo.pack(fill='x',padx=11,pady=4)
+            combo.bind('<<ComboboxSelected>>',lambda _e:self.viewer.set_quality(
+                self.quality_profile.get(),int(self.target_fps.get())))
+        self._label(tab,'FPS é uma meta. A prévia para de renderizar quando ociosa.',
+                    color=MUTED,size=9,wraplength=230).pack(anchor='w',padx=12,pady=6)
         self._label(tab,'Iluminação',bold=True,size=10).pack(anchor='w',padx=12,pady=(12,8))
         from ui.gpu_pbr_renderer import ENV_PRESETS
         ttk.Combobox(tab,textvariable=self._environment,values=list(ENV_PRESETS),
@@ -662,6 +685,8 @@ class PaintingStudio(tk.Frame):
     def _render_texture(self):
         self._refresh_id=None
         if not self.winfo_exists(): return
+        if not self.show_uv_editor.get():
+            return
         cw=max(self.canvas.winfo_width(),200)
         ch=max(self.canvas.winfo_height(),200)
         src=self.session.image
@@ -691,7 +716,7 @@ class PaintingStudio(tk.Frame):
         model=self.viewer._mesh
         if model is None:
             return None
-        state=(id(model), self.viewer.winfo_width(), self.viewer.winfo_height(),
+        state=(id(model), self.viewer.projection_limit, self.viewer.winfo_width(), self.viewer.winfo_height(),
                self.viewer.yaw, self.viewer.pitch, self.viewer.zoom,
                self.viewer.pan_x, self.viewer.pan_y, self.viewer.compare_reference)
         if self._picker is None or self._picker_state != state:
@@ -699,7 +724,8 @@ class PaintingStudio(tk.Frame):
                 model,yaw=self.viewer.yaw,pitch=self.viewer.pitch,zoom=self.viewer.zoom,
                 canvas_width=self.viewer.winfo_width(),canvas_height=self.viewer.winfo_height(),
                 pan_x=self.viewer.pan_x,pan_y=self.viewer.pan_y,
-                show_reference=self.viewer.compare_reference)
+                show_reference=self.viewer.compare_reference,
+                preview_limit=self.viewer.projection_limit)
             self._picker_state=state
         return self._picker
 
@@ -712,6 +738,7 @@ class PaintingStudio(tk.Frame):
         return hit.pixel(*self.session.image.size)
 
     def _paint3d_start(self,event):
+        self._brush_motion(event)
         self._last_3d=None
         if not self.paint3d_enabled.get():
             self.viewer._start_drag(event)
@@ -774,6 +801,7 @@ class PaintingStudio(tk.Frame):
         self.session.apply_surface_masks(patches,self.color.get(),self.opacity.get()/100,erase)
 
     def _paint3d_drag(self,event):
+        self._brush_motion(event)
         if not self.paint3d_enabled.get():
             self.viewer._drag(event)
             return
@@ -797,22 +825,14 @@ class PaintingStudio(tk.Frame):
 
     def _schedule_preview(self):
         if self._preview_job is None:
-            self._preview_job=self.after(90,self._refresh_live_preview)
+            self._preview_job=self.after(8,self._refresh_live_preview)
 
     def _refresh_live_preview(self):
         self._preview_job=None
         if not self.winfo_exists() or self.viewer._mesh is None:
             return
-        image=self.session.image.convert('RGB')
-        image.thumbnail((1024,1024),Image.Resampling.BILINEAR)
-        if self.session.selection is not None:
-            selection=self.session.selection.resize(image.size,Image.Resampling.NEAREST)
-            tint=Image.blend(image,Image.new('RGB',image.size,'#81CFFC'),.22)
-            image=Image.composite(tint,image,selection)
-        self.viewer._albedo=np.asarray(image,dtype=np.uint8).copy()
-        # The MAES map changes only when a material preset is applied,
-        # not on every albedo brush stroke. Avoid repeated 1024px copies.
-        self.viewer.render()
+        self.viewer.update_paint(self.session.image,
+            self.session.preview_damage.consume(),self.session.selection)
 
     def _undo(self):
         if self.session.undo():

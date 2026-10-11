@@ -39,7 +39,8 @@ class ProjectedUVPicker:
     def __init__(self, mesh, *, yaw: float, pitch: float, zoom: float,
                  canvas_width: int, canvas_height: int,
                  pan_x: float = 0., pan_y: float = 0.,
-                 show_reference: bool = True, reference_height: float = 1.75):
+                 show_reference: bool = True, reference_height: float = 1.75,
+                 preview_limit: int | None = PREVIEW_LIMIT):
         if canvas_width < 100 or canvas_height < 100:
             raise ValueError('Visualização pequena demais para pintura 3D.')
         if not (all(math.isfinite(float(v)) for v in
@@ -47,8 +48,8 @@ class ProjectedUVPicker:
                 and zoom > 0 and reference_height > 0):
             raise ValueError('Câmera inválida para pintura 3D.')
         self.canvas_width, self.canvas_height = canvas_width, canvas_height
-        self.image_width = min(PREVIEW_LIMIT,max(160,canvas_width))
-        self.image_height = min(PREVIEW_LIMIT,max(160,canvas_height))
+        self.image_width = canvas_width if preview_limit is None else min(preview_limit,max(160,canvas_width))
+        self.image_height = canvas_height if preview_limit is None else min(preview_limit,max(160,canvas_height))
         self.offset_x=(canvas_width-self.image_width)*0.5
         self.offset_y=(canvas_height-self.image_height)*0.5
 

@@ -1,4 +1,4 @@
-name: Astronyx Mini Forge Studio 4.2.0 Windows (Win10/Win11)
+name: Astronyx Mini Forge Studio 5.0.0 Windows (Win10/Win11)
 on:
   pull_request:
     branches: [main]
@@ -28,9 +28,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Instalar dependencias do visualizador de texturas
-        run: python -m pip install pillow numpy tkinterdnd2 moderngl glcontext
+        run: python -m pip install pillow numpy tkinterdnd2 moderngl glcontext pyopengltk==0.0.4 PyOpenGL==3.1.10
       - name: Testar motor preservado
-        run: python -m unittest discover -s tests -v
+        run: python -X faulthandler -m unittest discover -s tests -v
+      - name: Validar pintura na janela real e recuperacao de GPU
+        run: python tools/validate_native_viewport.py --report dist/validation-native-window.json --screenshot dist/native-window.png
       - name: Instalar Inno Setup 6
         shell: powershell
         run: choco install innosetup -y --no-progress
@@ -49,7 +51,7 @@ jobs:
       - name: Gerar hashes SHA256
         shell: powershell
         run: |
-          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v4.2.0.exe', 'dist/AstronyxMiniForgeStudio-Portable-v4.2.0-Win10-Win11-x64.zip')
+          $files = @('dist/installer/AstronyxMiniForgeStudio-Setup-v5.0.0.exe', 'dist/AstronyxMiniForgeStudio-Portable-v5.0.0-Win10-Win11-x64.zip')
           foreach ($file in $files) {
             $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
             "$hash  $file" | Add-Content -Path dist/SHA256SUMS.txt -Encoding ascii
@@ -61,19 +63,41 @@ jobs:
           path: |
             dist/validation-installed-onedir.json
             dist/validation-installer.json
+            dist/validation-native-window.json
+            dist/native-window.png
             dist/SHA256SUMS.txt
           if-no-files-found: error
       - name: Enviar ZIP portatil Windows 10 e 11
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Portable-ZIP
-          path: dist/AstronyxMiniForgeStudio-Portable-v4.2.0-Win10-Win11-x64.zip
+          path: dist/AstronyxMiniForgeStudio-Portable-v5.0.0-Win10-Win11-x64.zip
           if-no-files-found: error
       - name: Enviar instalador
         uses: actions/upload-artifact@v4
         with:
           name: AstronyxMiniForgeStudio-Windows-Setup
-          path: dist/installer/AstronyxMiniForgeStudio-Setup-v4.2.0.exe
+          path: dist/installer/AstronyxMiniForgeStudio-Setup-v5.0.0.exe
+          if-no-files-found: error
+
+  native-render:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar runtime grafico de teste
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb python3-tk python3-venv libgl1-mesa-dri
+          python3 -m venv /tmp/forge-native
+          /tmp/forge-native/bin/python -m pip install pillow numpy moderngl glcontext pyopengltk==0.0.4 PyOpenGL==3.1.10
+      - name: Validar GPU nativa, pintura e ociosidade com Mesa
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" /tmp/forge-native/bin/python tools/validate_native_viewport.py --require-native --report dist/native-render.json --screenshot dist/native-render.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AstronyxMiniForgeStudio-Native-Render
+          path: |
+            dist/native-render.json
+            dist/native-render.png
           if-no-files-found: error
 
   compatibility:
@@ -84,14 +108,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Dependencias de pre-visualizacao
-        run: python -m pip install pillow numpy tkinterdnd2 moderngl glcontext
+        run: python -m pip install pillow numpy tkinterdnd2 moderngl glcontext pyopengltk==0.0.4 PyOpenGL==3.1.10
       - name: Testes de compatibilidade em runtime Windows anterior
-        run: python -m unittest discover -s tests -v
+        run: python -X faulthandler -m unittest discover -s tests -v
       - name: Validar inicio sem desktop grafico
         run: python studio.py --version
 
   release:
-    needs: [windows, compatibility]
+    needs: [windows, compatibility, native-render]
     if: startsWith(github.ref, 'refs/tags/v') || inputs.publish_release == true || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     permissions:

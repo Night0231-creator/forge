@@ -1,3 +1,20 @@
+# Astronyx Mini Forge Studio V5.0 — viewport GPU nativo
+
+A área de pintura apresenta o 3D diretamente por OpenGL, sem baixar cada quadro para uma imagem Tk. Pincel, câmera, camadas e exportação utilizam os mesmos dados locais da V4.2.
+
+- Perfis **Auto**, **Leve** e **Alta**, com metas de **30 ou 60 FPS** na aba **Exibir**. O FPS efetivo depende do modelo, da GPU e do driver.
+- Redesenho sob demanda: a área 3D fica ociosa quando nada muda.
+- Textura de prévia de até 2K (1K no perfil Leve); somente as áreas alteradas são enviadas durante o traço. A textura de exportação mantém sua resolução original.
+- Cursor com tamanho do pincel e pintura alinhada ao viewport inteiro, inclusive acima de 900 pixels.
+- Prévia compatível automática se o driver não disponibilizar OpenGL 3.3. Desmarcar **Usar prévia GPU** também ativa esse caminho.
+- O limite anterior de 150 mil triângulos da prévia permanece; modelos maiores devem ser preparados/otimizados antes da pintura. Não há decimação destrutiva feita pelo viewport.
+
+Validação: `python -m unittest discover -s tests -v`; janela real: `python tools/validate_native_viewport.py --report dist/validation-native-window.json`. Em uma máquina OpenGL 3.3, acrescente `--require-native`. O teste verifica pintura, desfazer, redimensionamento, ociosidade, troca de backend e preservação dos arquivos originais.
+
+A distribuição Windows inclui as novas dependências. Blender e TaleWeaverCmd continuam responsáveis pelas conversões/exportações existentes. Esta atualização não equivale à implementação de todas as funcionalidades do Basecoat.
+
+---
+
 # Astronyx Mini Forge Studio 💜
 
 **Conversor gratuito de personagens 3D do Meshy para miniaturas do TaleSpire.**
@@ -6,7 +23,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v4.2.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v5.0.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +32,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v4.2.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v5.0.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
