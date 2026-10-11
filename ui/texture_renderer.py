@@ -204,3 +204,76 @@ def draw(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
                         pan_x=pan_x, pan_y=pan_y,
                         reference_height=reference_height)
     return frame
+
+def draw_fast(mesh: TextureMesh, albedo: np.ndarray, yaw: float, pitch: float,
+              zoom: float, width: int, height: int, pan_x: float = 0,
+              pan_y: float = 0, show_reference: bool = False,
+              reference_height: float = 1.75) -> Image.Image:
+    """Fast coloured CPU fallback for complex OBJ files.
+
+    Painter-sort triangles, rasterize with Pillow's native polygon implementation
+    and sample albedo at the UV centroid. Unlike skipping 97% of triangles, this
+    preserves a solid silhouette even for high-poly Meshy models. The result is
+    a faceted preview, not a substitute for GPU PBR or exact UV bilinear sampling.
+    """
+    from PIL import ImageDraw
+    width=int(max(100,min(width,900)))
+    height=int(max(100,min(height,900)))
+    points=np.asarray(mesh.points,dtype=np.float64)
+    if not len(mesh.triangles):
+        raise PreviewError('Nenhuma face para pré-visualizar.')
+    lo=points.min(axis=0)
+    hi=points.max(axis=0)
+    extent=max(float((hi-lo).max()),
+               reference_height if show_reference else 0.0,1e-5)
+    centered=points-(lo+hi)*.5
+    c,s=math.cos(yaw),math.sin(yaw)
+    cp,sp=math.cos(pitch),math.sin(pitch)
+    rx=c*centered[:,0]-s*centered[:,2]
+    rz=s*centered[:,0]+c*centered[:,2]
+    ry=cp*centered[:,1]-sp*rz
+    depth=sp*centered[:,1]+cp*rz
+    unit=min(width*(.50 if show_reference else .62),height*.74)/extent*zoom
+    projected=np.stack((width*(.37 if show_reference else .5)+rx*unit+pan_x,
+                        height*.55-ry*unit+pan_y),axis=1)
+    indices=mesh.triangles
+    triangle_xy=projected[indices]
+    triangle_depth=depth[indices].mean(axis=1)
+    # Back-to-front order matches the depth convention used by draw().
+    order=np.argsort(triangle_depth)
+    uv=np.asarray(mesh.texcoords,dtype=np.float64).mean(axis=1)
+    th,tw=albedo.shape[:2]
+    tx=np.clip((uv[:,0]*(tw-1)).astype(np.int32),0,tw-1)
+    ty=np.clip(((1-uv[:,1])*(th-1)).astype(np.int32),0,th-1)
+    colors=albedo[ty,tx].astype(np.float32)
+    # Bright but not flat: lighting measured in the rotated camera frame.
+    triangles=points[indices]
+    n=np.cross(triangles[:,1]-triangles[:,0],
+               triangles[:,2]-triangles[:,0])
+    norms=np.maximum(np.linalg.norm(n,axis=1),1e-8)
+    light=np.abs((n @ np.array([.34,.75,.53]))/norms)
+    brightness=(.76+.24*light)
+    colors=np.clip(colors*brightness[:,None]+3,0,255).astype(np.uint8)
+    visible=((triangle_xy[:,:,0].max(axis=1)>=0)
+             &(triangle_xy[:,:,0].min(axis=1)<=width)
+             &(triangle_xy[:,:,1].max(axis=1)>=0)
+             &(triangle_xy[:,:,1].min(axis=1)<=height))
+    frame=Image.new('RGB',(width,height),(24,28,42))
+    painter=ImageDraw.Draw(frame)
+    palette=[tuple(int(v) for v in px) for px in colors]
+    for i in order:
+        if not visible[i]:
+            continue
+        pts=triangle_xy[i]
+        painter.polygon(((float(pts[0,0]),float(pts[0,1])),
+                         (float(pts[1,0]),float(pts[1,1])),
+                         (float(pts[2,0]),float(pts[2,1]))),
+                        fill=palette[i])
+    if show_reference:
+        paint_reference(frame,base_y=float(lo[1]),
+                        center_y=float((lo[1]+hi[1])*.5),
+                        model_height=float(hi[1]-lo[1]),
+                        pixels_per_unit=unit,pitch=pitch,
+                        pan_x=pan_x,pan_y=pan_y,
+                        reference_height=reference_height)
+    return frame

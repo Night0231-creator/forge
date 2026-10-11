@@ -34,7 +34,7 @@ class UnifiedStudioTests(unittest.TestCase):
         ast.parse(source)
         self.assertIn('class UnifiedStudio(tk.Frame):',source)
         self.assertIn("self.app._navigate('quick','tab_dashboard')",source)
-        self.assertIn('on_exit=self.close_editor',source)
+        self.assertIn('on_exit=self._back_to_library',source)
         self.assertIn("'export','tab_cmd'",source)
         self.assertIn('self.app._install_library(self.current.tsmod)',source)
         self.assertIn('find_albedo(entry.folder)',source)
@@ -62,7 +62,7 @@ class UnifiedStudioTests(unittest.TestCase):
 
     def test_version(self):
         from core.version import APP_VERSION
-        self.assertEqual(APP_VERSION,'3.2.0')
+        self.assertEqual(APP_VERSION,'4.0.0')
 
 
 if __name__=='__main__':

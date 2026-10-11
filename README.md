@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v3.2.0-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v4.0.0-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v3.2.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v4.0.0.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -214,3 +214,14 @@ A interface principal do executável foi redesenhada para colocar **pintura, pro
 - Atualizações da cor Albedo deixam de copiar o mapa MAES a cada pincelada. Os dados MAES continuam modificados somente pelo material e sua exportação.
 - O modo CPU de reserva, histórico/rascunhos/backups e exportação TaleWeaverLite permanecem disponíveis; nada modifica automaticamente .tsMod nem escala 1x1.
 - [Guia V3.2](docs/V3_2_SMOOTH_PAINT_ENV_LIGHTING.md).
+
+
+## V4.0.0 — Astronyx Miniature Studio (redesign e prévia corrigida)
+
+- O aplicativo passa a abrir o editor de pintura ao selecionar um projeto Meshy preparado, sem a tela intermediária de geometria escura. Biblioteca e bancada permanecem na mesma janela.
+- Cabeçalhos duplicados removidos do workspace para ampliar o modelo 3D. Importação, exportação TaleSpire e instalação permanecem no fluxo principal; telas técnicas continuam acessíveis.
+- **Correção de miniaturas escuras:** quando OpenGL não está disponível ou falha no driver Windows, o fallback CPU desenha toda a silhueta em cores do Albedo, rasterizando os triângulos pela ordem de profundidade com Pillow, sem depender da prévia geométrica limitada a 1600 faces. Em modelos pequenos, mantém a rasterização texturizada mais precisa. A falha GPU é exibida no status em vez de ficar escondida.
+- **Carimbos** Estrela, Selo, Runa e PNG de transparência importado; podem ser colocados diretamente na superfície 3D ou no mapa UV, respeitando camadas e seleções.
+- O editor mantém backups dos Albedos/MAES antes de exportar e não altera arquivos .tsMod automaticamente; gere novamente o .tsMod pelo conversor após editar a pintura.
+- Este é um produto independente inspirado na usabilidade do Basecoat, **não uma réplica do software**. Ainda faltam automação de remesh/unwrap com bake de normais, iluminação HDRI real, pincel UV com simetria avançada, regiões semânticas e outros recursos. A visualização GPU depende do driver OpenGL 3.3+.
+- [Guia V4.0](docs/V4_0_MINIATURE_STUDIO.md).
