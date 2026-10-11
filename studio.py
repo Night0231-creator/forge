@@ -231,6 +231,7 @@ class Studio(UpdateInterface, legacy.Forge):
         body = tk.Frame(self, bg=legacy.BG)
         body.pack(fill='both', expand=True)
         sidebar = tk.Frame(body, bg=SIDEBAR, width=225)
+        self.legacy_sidebar=sidebar
         sidebar.pack(side='left', fill='y')
         sidebar.pack_propagate(False)
 
@@ -281,6 +282,7 @@ class Studio(UpdateInterface, legacy.Forge):
                  justify='center',anchor='center').pack(fill='x',pady=(4,0))
 
         main = tk.Frame(body, bg=legacy.BG)
+        self.main_panel=main
         main.pack(side='left', fill='both', expand=True)
         hero = tk.Frame(main, bg=polish.PANEL, height=80)
         hero.pack(fill='x')
@@ -386,9 +388,13 @@ class Studio(UpdateInterface, legacy.Forge):
             'tab_guide': ('Ajuda e tutorial','Dicas de importação, conversão e instalação.')
         }
         if selected==str(self.tab_workspace):
+            self.legacy_sidebar.pack_forget()
             self.hero_bar.pack_forget()
             self.status_bar.pack_forget()
         else:
+            if not self.legacy_sidebar.winfo_manager():
+                self.legacy_sidebar.pack(side='left',fill='y',
+                                         before=self.main_panel)
             if not self.hero_bar.winfo_manager():
                 self.hero_bar.pack(fill='x',before=self.view_container)
             if not self.status_bar.winfo_manager():
