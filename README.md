@@ -6,7 +6,7 @@
 
 ### [BAIXAR VERSÃO PORTÁTIL (ZIP) — recomendada quando o instalador mostra erro 4551](https://github.com/Night0231-creator/forge/releases/latest)
 
-1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.14-Win10-Win11-x64.zip`.
+1. Baixe o arquivo `AstronyxMiniForgeStudio-Portable-v2.2.15-Win10-Win11-x64.zip`.
 2. Clique com o botão direito e selecione **Extrair tudo**; não execute dentro do ZIP.
 3. Abra a pasta `AstronyxMiniForgeStudio` extraída.
 4. Execute `AstronyxMiniForgeStudio.exe` e mantenha a pasta `_internal` junto dele.
@@ -15,7 +15,7 @@ A versão portátil não executa o instalador Inno Setup nem extrai um bootloade
 
 ### [Baixar instalador tradicional (Setup.exe)](https://github.com/Night0231-creator/forge/releases/latest)
 
-Baixe `AstronyxMiniForgeStudio-Setup-v2.2.14.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
+Baixe `AstronyxMiniForgeStudio-Setup-v2.2.15.exe`. O instalador continua disponível para Windows 10 e Windows 11 nos computadores que permitem a execução.
 
 **Dependências para converter:** [Blender](https://www.blender.org/download/) e [TaleSpire na Steam](https://store.steampowered.com/app/720620/TaleSpire/) com TaleWeaverCmd. Python não é necessário no computador dos amigos.
 
@@ -151,3 +151,12 @@ Se a atualização da V2.2.3 falhar, baixe o novo Setup manualmente na página R
 - Cada conversão registra `calibracao_visual_1x1.json` com medições e alertas de tamanho, sem alterar a malha original nem o `.tsMod`.
 - Referências não equivalem ao collider/Default Scale do TaleSpire: validação final no jogo continua necessária.
 - Editor de pintura de materiais fica para uma próxima versão. [Manual](docs/V2_2_14_VISUAL_CALIBRATOR.md).
+
+
+## V2.2.15 — Painting Studio UV
+
+- **PINTAR MINIATURA** abre o editor de textura UV com pincel, borracha, balde, conta-gotas, paleta, opacidade, desfazer e refazer.
+- O editor permite salvar rascunhos em `Pintura/Albedo_editado.png` e aplicar a pintura com backups às texturas usadas pelo TaleWeaverCmd.
+- O `.tsMod` anterior não é alterado: use **Gerar .tsMod de uma pasta já preparada** para incluir a nova textura.
+- A prévia 3D permanece somente visual; pintura diretamente na malha 3D será etapa posterior.
+- [Guia do Painting Studio](docs/V2_2_15_PAINTING_STUDIO.md).

@@ -1,4 +1,4 @@
-"""Astronyx Mini Forge Studio V2.2.14.
+"""Astronyx Mini Forge Studio V2.2.15.
 
 New desktop presentation; intentionally delegates all conversion to unchanged
 V1.7 Forge methods and core modules.
