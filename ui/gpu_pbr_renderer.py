@@ -9,7 +9,7 @@ import math
 import threading
 import numpy as np
 from PIL import Image
-from .texture_renderer import draw, MAX_TRIANGLES
+from .texture_renderer import draw, draw_fast, MAX_TRIANGLES
 
 VS = """#version 330
 in vec3 in_position;
@@ -276,14 +276,23 @@ def render_preview(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,height,
                 img=gpu.render(mesh,albedo,maes,normal_map,yaw,pitch,zoom,width,
                                height,pan_x,pan_y,light,emission,ambient,environment)
                 return img,'GPU OpenGL 3.3 · PBR (prévia)'
-        except Exception:
-            # Prefer a visible CPU image to a crash/blank window, including in
-            # remote desktop sessions where WGL context creation may fail.
+        except Exception as exc:
+            # Expose a short diagnostic instead of hiding a driver/shader issue.
             _THREAD.no_gpu=True
             _THREAD.gpu=None
-    img=draw(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
-             False,show_reference,1.75)
-    return img,'CPU · Albedo (PBR indisponível)'
+            _THREAD.gpu_error=f'{type(exc).__name__}: {str(exc)[:95]}'
+    if len(mesh.triangles)>4500:
+        img=draw_fast(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
+                      show_reference,1.75)
+        backend='CPU · prévia rápida colorida'
+    else:
+        img=draw(mesh,albedo,yaw,pitch,zoom,width,height,pan_x,pan_y,
+                 False,show_reference,1.75)
+        backend='CPU · textura Albedo'
+    reason=getattr(_THREAD,'gpu_error',None)
+    if reason and not force_cpu:
+        backend+=' · OpenGL indisponível: '+reason[:63]
+    return img,backend
 
 
 def gpu_available() -> bool:
