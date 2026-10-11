@@ -186,9 +186,9 @@ class GPUPreview:
         arr=np.asarray(data,dtype=np.uint8)
         if arr.ndim!=3 or arr.shape[2]!=components:
             raise ValueError('Dados de textura inválidos.')
-        key=(id(data),arr.shape)
         entry=self.tex_cache.get(name)
-        if entry is not None and entry[0]==key:
+        # Keep an identity reference to prevent Python recycling an old id.
+        if entry is not None and entry[0] is data and entry[2]==arr.shape:
             return entry[1]
         if entry is not None:
             entry[1].release()
@@ -200,7 +200,7 @@ class GPUPreview:
         image.filter=(self.gl.LINEAR,self.gl.LINEAR)
         image.repeat_x=False
         image.repeat_y=False
-        self.tex_cache[name]=(key,image)
+        self.tex_cache[name]=(data,image,arr.shape)
         return image
 
     def _fbo(self,width,height):
