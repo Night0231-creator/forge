@@ -27,6 +27,9 @@ from core.archive import extract_meshy_zip
 from core.preview import ObjViewer
 from core.geometry import inspect_obj, suggest_factor
 from core.scale_audit import audit_scale
+from core.footprint_calibrator import (analyze_footprint, find_project_obj,
+                                       write_calibration_report)
+from ui.calibration_dialog import show_calibration
 from core.quality_notes import quality_notes
 from core.taleweaverlite_handoff import prepare_taleweaverlite_handoff
 from core.unity_bridge import (find_unity_editor, find_taleweaverlite_project,
@@ -423,6 +426,7 @@ class Forge(tk.Tk):
         top.pack(fill='x',pady=(0,10))
         self._button(top,'Abrir OBJ preparado',self._choose_preview_obj,accent=True).pack(side='left',padx=(0,8))
         self._button(top,'Último personagem',self._preview_last).pack(side='left',padx=(0,8))
+        self._button(top,'Calibrar 1×1',self._calibrate_1x1).pack(side='left',padx=(0,8))
         self._button(top,'Restaurar câmera',lambda: self.viewer.reset()).pack(side='left')
         self._label(holder,'Prévia geométrica 3D (sem texturas). Gire com o mouse e use a roda para zoom. '
                           'O retrato ao lado é renderizado pelo Blender com as texturas.',
@@ -442,6 +446,33 @@ class Forge(tk.Tk):
                  justify='left',anchor='nw',wraplength=255,font=('Segoe UI',10)).pack(fill='x',padx=12)
         self._label(holder,'O tamanho recomendado é uma estimativa baseada no seu teste, não uma '
                   'escala oficial. Confira a miniatura no TaleSpire.',bg=BG,wraplength=900).pack(anchor='w',pady=(10,0))
+
+    def _calibrate_1x1(self):
+        """Inspect final TaleWeaverCmd OBJ, not the imported Meshy source."""
+        if self.busy:
+            messagebox.showinfo('Conversão em andamento',
+                                'Aguarde finalizar para analisar a geometria exportada.')
+            return
+        project=self.last_output
+        if project is None or not Path(project).is_dir():
+            root=Path(self.target.get()).expanduser()
+            candidate=root/safe_slug(self.name.get())
+            if (candidate/'TaleWeaverCmd_Source').is_dir():
+                project=candidate
+            else:
+                selected=filedialog.askdirectory(
+                    title='Escolha a pasta do personagem gerada pelo Mini Forge',
+                    initialdir=str(root) if root.is_dir() else str(Path.home()))
+                if not selected:
+                    return
+                project=Path(selected)
+        try:
+            source=find_project_obj(project)
+            preview=analyze_footprint(source)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Calibração indisponível',str(exc))
+            return
+        show_calibration(self,preview,project)
 
     def _choose_preview_obj(self):
         filename=filedialog.askopenfilename(title='Selecione o OBJ preparado',
@@ -1248,6 +1279,16 @@ class Forge(tk.Tk):
                 except (OSError,ValueError) as exc:
                     self.log_events.put(('log',
                         '[UNITY] Aviso: modelo convertido, mas importação Unity falhou: '+str(exc)))
+            # Stage-dependent measurements; saved even when TaleWeaverCmd fails.
+            # Warning-only: never invent a collider or silently rescale the mesh.
+            try:
+                report_path=write_calibration_report(dest)
+                data=json.loads(report_path.read_text(encoding='utf-8'))
+                self.log_events.put(('log','[CALIBRAÇÃO] Geometria registrada: '+str(report_path)))
+                for note in data.get('observations',[]):
+                    self.log_events.put(('log','[CALIBRAÇÃO] '+note))
+            except (OSError,ValueError) as exc:
+                self.log_events.put(('log','[CALIBRAÇÃO] Aviso: '+str(exc)))
             # Portable zip for moving prepared assets and final file if present.
 
             zip_path = dest / (cfg['name'] + '_ARQUIVOS_PREPARADOS.zip')

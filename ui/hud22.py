@@ -98,6 +98,7 @@ def dashboard(app):
     app.hud_generate_button=action(actions,'GERAR .TSMOD',app._start_quick,True)
     app.hud_generate_button.pack(side='left',padx=(0,9))
     action(actions,'Abrir resultado',app._open_result).pack(side='left',padx=(0,9))
+    action(actions,'Calibrar 1×1',app._calibrate_1x1).pack(side='left',padx=(0,9))
     action(actions,'Mais opções',lambda:app._navigate('convert','tab_quick')).pack(side='left')
     ttk.Progressbar(step,variable=app.progress,maximum=100,
                     style='Astronyx.Horizontal.TProgressbar').pack(fill='x',padx=18,pady=(0,7))
