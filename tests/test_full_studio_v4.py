@@ -38,6 +38,7 @@ class FullStudioTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project=Path(tmp)
             (project/'TaleWeaverLite').mkdir()
+            (project/'TaleWeaverCmd_Source').mkdir()
             source=project/'TaleWeaverLite/Albedo.png'
             Image.new('RGBA',(96,96),'#606060').save(source)
             session=LayeredPaintSession(source,project)
