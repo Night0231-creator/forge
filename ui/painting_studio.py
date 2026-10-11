@@ -74,7 +74,7 @@ class PaintingStudio(tk.Toplevel):
         left=tk.Frame(body,bg=PANEL,width=390)
         left.pack(side='left',fill='both',expand=True,padx=(0,10))
         self._label(left,'VISUALIZAÇÃO 3D',bold=True).pack(anchor='w',padx=12,pady=10)
-        self.viewer = TexturedObjViewer(left,width=390,height=540,bg=BG)
+        self.viewer = TexturedObjViewer(left,width=390,height=540)
         self.viewer.pack(fill='both',expand=True,padx=8)
         try:
             self.viewer.open(find_project_obj(self.project))
