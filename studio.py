@@ -414,7 +414,7 @@ class Studio(UpdateInterface, legacy.Forge):
         try:
             model=parse_dropped_model(event.data, self.tk.splitlist)
             self._set_model_source(model)
-            self._navigate('home','tab_dashboard')
+            self._navigate('quick','tab_dashboard')
         except ValueError as exc:
             messagebox.showwarning('Arquivo Meshy inválido',str(exc))
         return 'break'
