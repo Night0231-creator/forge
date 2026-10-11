@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 import tkinter as tk
 from pathlib import Path
-from tkinter import colorchooser, messagebox, ttk
+from tkinter import colorchooser, filedialog, messagebox, ttk
 from PIL import Image, ImageDraw, ImageTk
 import numpy as np
 
@@ -39,6 +39,8 @@ class PaintingStudio(tk.Frame):
         self.size = tk.IntVar(value=20)
         self.opacity = tk.IntVar(value=100)
         self.tolerance = tk.IntVar(value=12)
+        self.stamp_name=tk.StringVar(value='Estrela')
+        self.stamp_image=None
         self.show_uv = tk.BooleanVar(value=True)
         self.status = tk.StringVar(value='Pinte a textura e salve um rascunho antes de aplicar.')
         self.on_apply = on_apply
@@ -88,7 +90,7 @@ class PaintingStudio(tk.Frame):
             self._button(line,'← Projetos',self.on_exit).pack(side='left',padx=(0,14))
         self._label(line,'◈ ASTRONYX  /  PAINT STUDIO',color=TEXT,size=15,bold=True).pack(
             side='left',pady=13)
-        self._label(line,'PINTURA 3D • V3.0',color='#B89EFA',size=9,bold=True).pack(
+        self._label(line,'ESTÚDIO 3D  ·  V4.0',color='#B89EFA',size=9,bold=True).pack(
             side='left',padx=14)
         self._button(line,'Exportar texturas',self._apply,highlight=True).pack(
             side='right',pady=10)
@@ -126,11 +128,18 @@ class PaintingStudio(tk.Frame):
             anchor='w',padx=12,pady=(10,8))
         for title,key in (('Pincel','pincel'),('Preenchimento','balde'),
                           ('Conta-gotas','conta-gotas'),('Borracha','borracha'),
-                          ('Selecionar região','regiao')):
+                          ('Selecionar região','regiao'),('Carimbo','carimbo')):
             tk.Radiobutton(right,text=title,value=key,variable=self.mode,
                            bg=PANEL,fg=TEXT,selectcolor=FIELD,
                            activebackground=PANEL,activeforeground=TEXT,
                            anchor='w',font=('Segoe UI',10)).pack(fill='x',padx=11,pady=4)
+        self._label(right,'CARIMBOS',color=MUTED,size=9,bold=True).pack(
+            anchor='w',padx=12,pady=(10,5))
+        ttk.Combobox(right,values=('Estrela','Selo','Runa','PNG personalizado'),
+                     textvariable=self.stamp_name,state='readonly',
+                     width=20).pack(fill='x',padx=11,pady=(0,4))
+        self._button(right,'Carregar PNG…',self._load_custom_stamp).pack(
+            fill='x',padx=11,pady=(0,5))
         self._label(right,'TAMANHO',color=MUTED,size=9,bold=True).pack(
             anchor='w',padx=12,pady=(14,0))
         tk.Scale(right,from_=1,to=100,orient='horizontal',variable=self.size,
@@ -410,6 +419,37 @@ class PaintingStudio(tk.Frame):
         if chosen and chosen[1]:
             self._set_color(chosen[1])
 
+    def _load_custom_stamp(self):
+        filename=filedialog.askopenfilename(parent=self,
+                    title='Escolha um carimbo PNG com transparência',
+                    filetypes=[('Imagem PNG','*.png')])
+        if not filename:
+            return
+        try:
+            if Path(filename).stat().st_size > 8_000_000:
+                raise ValueError('O carimbo PNG deve ter no máximo 8 MB.')
+            with Image.open(filename) as im:
+                if im.width*im.height>1024*1024:
+                    raise ValueError('O carimbo deve ter até 1 milhão de pixels.')
+                self.stamp_image=im.convert('RGBA')
+            self.stamp_name.set('PNG personalizado')
+            self.mode.set('carimbo')
+            self.status.set('PNG personalizado pronto. Clique no modelo para carimbar.')
+        except (OSError,ValueError) as error:
+            messagebox.showerror('Carimbo inválido',str(error),parent=self)
+
+    def _stamp_at(self,point):
+        shape=self.stamp_name.get()
+        use_custom=(shape=='PNG personalizado')
+        if use_custom and self.stamp_image is None:
+            self.status.set('Carregue um PNG antes de usar o carimbo personalizado.')
+            return False
+        self.session.stamp(*point,self.color.get(),
+                           diameter=max(4,self.size.get()*2),
+                           opacity=self.opacity.get()/100,
+                           shape=shape,custom=self.stamp_image if use_custom else None)
+        return True
+
     def _coords(self,event):
         x0,y0,scale=self._view
         x=int((event.x-x0)/scale)
@@ -431,6 +471,9 @@ class PaintingStudio(tk.Frame):
         self.session.checkpoint()
         if mode=='balde':
             self.session.bucket(*p,self.color.get(),self.tolerance.get())
+        elif mode=='carimbo':
+            if not self._stamp_at(p):
+                return
         else:
             self.session.stroke(p,p,self.color.get(),self.size.get(),
                                 self.opacity.get()/100,erase=(mode=='borracha'))
@@ -525,6 +568,9 @@ class PaintingStudio(tk.Frame):
         self.session.checkpoint()
         if mode=='balde':
             self.session.bucket(*point,self.color.get(),self.tolerance.get())
+        elif mode=='carimbo':
+            if not self._stamp_at(point):
+                return
         else:
             self.session.stroke(point,point,self.color.get(),self.size.get(),
                                 self.opacity.get()/100,erase=(mode=='borracha'))
