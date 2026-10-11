@@ -1,5 +1,6 @@
 """V3.0 UI contracts and packaging regressions (no Tk display required)."""
 import ast
+import os
 from pathlib import Path
 import unittest
 
@@ -37,6 +38,27 @@ class UnifiedStudioTests(unittest.TestCase):
         self.assertIn("'export','tab_cmd'",source)
         self.assertIn('self.app._install_library(self.current.tsmod)',source)
         self.assertIn('find_albedo(entry.folder)',source)
+
+
+    @unittest.skipUnless(os.name == 'nt', 'GUI smoke targeted at Windows runner')
+    def test_windows_gui_startup_creates_unified_editor_shell(self):
+        import tkinter as tk
+        try:
+            probe=tk.Tk()
+        except tk.TclError as exc:
+            self.skipTest('Tk display unavailable: '+str(exc))
+        else:
+            probe.destroy()
+        from studio import Studio
+        app=Studio()
+        try:
+            app.withdraw()
+            app.update_idletasks()
+            self.assertTrue(hasattr(app,'workspace'))
+            self.assertTrue(hasattr(app.workspace,'workarea'))
+            self.assertEqual(app.tabs.select(),str(app.tab_workspace))
+        finally:
+            app.destroy()
 
     def test_version(self):
         from core.version import APP_VERSION
